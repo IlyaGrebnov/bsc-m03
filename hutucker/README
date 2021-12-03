@@ -1,0 +1,88 @@
+This is an O(n log n) implementation of Hu-Tucker coding.[1]
+
+This is the algorithm:
+1. Label node 0, ..., n-1 'terminal'
+2. Repeat (n - 1) times:
+   (a) Find the pair (i, j) such that
+       (i)   i < j,
+       (ii)  neither node i nor j is labeled 'none',
+       (iii) none of node i+1, ..., j-1 is labeled 'terminal',
+       (iv)  weight[i] + weight[j] are minimal,
+       (v)   i is minimal if the selection is not unique after (iv), and
+       (vi)  j is minimal if the selection is not unique after (v)
+   (b) Merge node i with node j, and saves it as new node i
+   (c) weight[i] += weight[j]
+   (d) Label node i 'internal'
+   (e) Label node j 'none'
+3. A tree has been built with root being node 0.
+   Traverse this tree for length of code.
+   This tree is not alphabetical.
+   Nevertheless, the length of code produced by the tree is correct.
+
+See example.c for computing the actual code from the length.
+
+We need a non-trivial data structure to implement 2(a) efficiently.
+This is the data structure:
+1. It is a perfect binary tree.
+   The nodes in this tree are called "segnodes" to distinguish them from
+   nodes in the coding tree.
+   This tree shall have at least n leaf segnodes.
+2. Each segnode is implicitly associated with a range [a, b).
+   The range of the leaf segnode i is [i, i+1).
+   The range of each internal segnode is union of the ranges of its children.
+   (Alternatively, the range of each internal nodes is the union of
+    the ranges of all leaf nodes in its subtree.)
+3. Each segnode also has 6 explicit fields (n, m, l, r, i, j).
+   n: The number of nodes [a, b) labeled 'terminal' or 'internal'
+   m: The number of nodes [a, b) labeled 'terminal'
+   l: The index such that:
+      (i)   l in [a, b),
+      (ii)  node l is not labeled 'none',
+      (iii) none of node l, ..., i-1 is labeled 'terminal',
+      (iv)  weight[l] is minimal, and
+      (v)   l is minimal if the selection is not unique after (iv)
+   r: The index such that:
+      (i)   r in [a, b),
+      (ii)  node r is not labeled 'none',
+      (iii) none of node r, ..., b-1 is labeled 'terminal',
+      (iv)  weight[r] is minimal, and
+      (v)   r is minimal if the selection is not unique after (iv)
+   i, j: The pair of indices such that:
+      (i)   a <= i < j < b,
+      (ii)  neither node i nor j is labeled 'none',
+      (iii) none of node i+1, ..., j-1 is labeled 'terminal',
+      (iv)  weight[i] + weight[j] are minimal,
+      (v)   i is minimal if the selection is not unique after (iv), and
+      (vi)  j is minimal if the selection is not unique after (v)
+4. The explicit fields can be trivially computed for leaf segnodes:
+   (a) Leaf segnode i labeled 'terminal':
+       (n, m, l, r, i, j) = (1, 1, i, i, None, None)
+   (b) Leaf segnode i labeled 'internal':
+       (n, m, l, r, i, j) = (1, 0, i, i, None, None)
+   (c) Leaf segnode i labeled 'none':
+       (n, m, l, r, i, j) = (0, 0, None, None, None, None)
+5. The explicit fields can be efficiently computed for internal segnodes,
+   if we have access to correct labels of its children segnodes.
+   Let its left children be L, and its right children be R.
+   n: L.n + R.n
+   m: L.n + R.m
+   l: L.l if L.m > 0, otherwise the better of L.l and R.l
+   r: R.r if R.m > 0, otherwise the better of L.r and R.r
+   i, j: the best of (L.i, L.j), (L.r, R.l) and (R.i, R.j)
+
+Analysis:
+1. This data structure can be built in O(n).
+2. The (i, j) step 2(a) is the (i, j) of the root of the data structure,
+   which can be looked up in O(1).
+3. When the weight[i] and label of node i changed,
+   leaf segnode i and its ancestors need to be updated.
+   That's O(log n) updates and O(1) per update.
+   Same for node j.
+4. Step 2 is repeated O(n) times.
+   Other parts are trivial.
+   Therefore, the overall time is O(n log n).
+
+
+[1]: Hu, T. C.; Tucker, A. C. (1971) "Optimal Computer Search Trees
+     and Variable-Length Alphabetical Codes", SIAM Journal on
+     Applied Mathematics. 21 (4): 514.

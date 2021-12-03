@@ -1,0 +1,23 @@
+Changes in 2.6.0 (October 21, 2021)
+- libsais16 for 16-bit inputs.
+
+Changes in 2.5.0 (October 15, 2021)
+- Support for optional symbol frequency tables.
+
+Changes in 2.4.0 (July 14, 2021)
+- Reverse Burrows-Wheeler transform.
+
+Changes in 2.3.0 (June 23, 2021)
+- Burrows-Wheeler transform with auxiliary indexes.
+
+Changes in 2.2.0 (April 27, 2021)
+- libsais64 for inputs larger than 2GB.
+
+Changes in 2.1.0 (April 19, 2021)
+- Additional OpenMP acceleration.
+
+Changes in 2.0.0 (April 4, 2021)
+- OpenMP acceleration.
+
+Changes in 1.0.0 (February 23, 2021)
+- Initial Release.

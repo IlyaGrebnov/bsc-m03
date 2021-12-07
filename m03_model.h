@@ -34,6 +34,8 @@ This file is a part of bsc-m03 project.
 #pragma warning( disable : 6385 )
 #pragma warning( disable : 6386 )
 
+#define SYMBOL_HISTORY_MAX_DEPTH (16)
+
 enum class m03_mode : int { encoding = 0, decoding = 1, };
 
 class m03_model
@@ -46,9 +48,9 @@ protected:
         this->coder = coder;
         this->mode  = mode;
 
-        for (int32_t s = 0; s < 1536; ++s) { T1_model[s][0] = T1_model[s][1] = 1; }
-        for (int32_t s = 0; s < 1536; ++s) { T2_model[s][0] = T2_model[s][1] = T2_model[s][2] = T2_model[s][3] = 1; }
-        for (int32_t s = 0; s < 768 ; ++s) { Ternary_model[s][0] = Ternary_model[s][1] = Ternary_model[s][2] = Ternary_model[s][3] = 1; }
+        for (int32_t s = 0; s < 3072; ++s) { T1_model[s][0] = T1_model[s][1] = 1; }
+        for (int32_t s = 0; s < 3072; ++s) { T2_model[s][0] = T2_model[s][1] = T2_model[s][2] = T2_model[s][3] = 1; }
+        for (int32_t s = 0; s < 1536; ++s) { Ternary_model[s][0] = Ternary_model[s][1] = Ternary_model[s][2] = Ternary_model[s][3] = 1; }
         for (int32_t s = 0; s < 96  ; ++s) { for (int32_t c = 0; c < 16; ++c) { Tree_model[s][c] = 1; } }
     }
 
@@ -215,8 +217,10 @@ protected:
         }
     }
 
-    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining)
+    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level)
     {
+        level = std::min(level, SYMBOL_HISTORY_MAX_DEPTH - 1); this->Symbol_history[symbol][level] = 0;
+
         int32_t inferred_right = std::max(total - left_remaining, 0);
         right_remaining -= inferred_right; total -= inferred_right;
 
@@ -224,6 +228,10 @@ protected:
 
         if (total > 0)
         {
+            int32_t history =
+                level > 1 ? this->Symbol_history[symbol][level - 1] | this->Symbol_history[symbol][level - 2] :
+                level > 0 ? this->Symbol_history[symbol][level - 1] : 0;
+
             if (total <= 2)
             {
                 int32_t state = 0;
@@ -231,15 +239,16 @@ protected:
                 state += 8   * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
                 state += 32  * (left_remaining + right_remaining == symbols_remaining);
                 state += 64  * (left_remaining == total);
-                state += 128 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+                state += 128 * (history);
+                state += 256 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
 
                 if (total == 1)
                 {
                     static const int threshold[12] = { 147, 251, 374, 540, 761, 763, 1589, 2275, 2193, 3457, 3811, 1017 };
 
-                    uint16_t * RESTRICT predictor = &this->T1_model[state][0];
+                    uint16_t * RESTRICT predictor = &this->T1_model[state & 0xffffff7f][0];
 
-                    if (predictor[0] + predictor[1] > threshold[state >> 7])
+                    if (predictor[0] + predictor[1] > threshold[state >> 8])
                     {
                         predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
                         predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
@@ -265,7 +274,7 @@ protected:
 
                     uint16_t * RESTRICT predictor = &this->T2_model[state][0];
 
-                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 7])
+                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 8])
                     {
                         predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
                         predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
@@ -287,7 +296,7 @@ protected:
                         this->coder->Decode(cum_freq, predictor[count], predictor[0] + predictor[1] + predictor[2]);
                     }
 
-                    predictor[count]++;
+                    predictor[count]++; this->Symbol_history[symbol][level] = count != 1;
                 }
             }
             else
@@ -309,12 +318,13 @@ protected:
                     state += 1   * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
                     state += 4   * (inferred_right > 0);
                     state += 8   * (left_remaining == total);
-                    state += 16  * (std::min((int32_t)bit_scan_reverse(total - 2), 7));
-                    state += 128 * (((int64_t)left_remaining * 9 + right_remaining) / ((int64_t)right_remaining * 2));
+                    state += 16  * (history);
+                    state += 32  * (std::min((int32_t)bit_scan_reverse(total - 2), 7));
+                    state += 256 * (((int64_t)left_remaining * 9 + right_remaining) / ((int64_t)right_remaining * 2));
 
                     uint16_t * RESTRICT predictor = &this->Ternary_model[state][0];
 
-                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 4])
+                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 5])
                     {
                         predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
                         predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
@@ -336,7 +346,7 @@ protected:
                         this->coder->Decode(cum_freq, predictor[pivot], predictor[0] + predictor[1] + predictor[2]);
                     }
 
-                    predictor[pivot]++; if (pivot != 1) { count = pivot == 0 ? 0 : total; }
+                    predictor[pivot]++; this->Symbol_history[symbol][level] = pivot != 1; if (pivot != 1) { count = pivot == 0 ? 0 : total; }
                 }
 
                 if (pivot == 1)
@@ -399,10 +409,12 @@ protected:
 private:
     RangeCoder *    coder;
 
-    uint16_t        T1_model[1536][2];
-    uint16_t        T2_model[1536][4];
-    uint16_t        Ternary_model[768][4];
+    uint16_t        T1_model[3072][2];
+    uint16_t        T2_model[3072][4];
+    uint16_t        Ternary_model[1536][4];
     uint16_t        Tree_model[96][16];
+
+    uint8_t         Symbol_history[MAX_ALPHABET_SIZE][SYMBOL_HISTORY_MAX_DEPTH];
 };
 
 #pragma warning( pop )

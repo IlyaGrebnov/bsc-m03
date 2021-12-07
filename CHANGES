@@ -1,2 +1,5 @@
+* 2021-12-07 : Version 0.1.1
+  * Slightly improved compression using symbols history.
+
 * 2021-12-03 : Version 0.1.0
   * Initial public release of the bsc-m03.

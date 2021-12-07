@@ -251,7 +251,7 @@ private:
                 else
                 {
                     m03_parser::populate_context_frequencies(&this->contexts[context_start], &this->contexts[this->primary_index], &this->parent_frequencies[0]);
-                    this->split_context_recursive(&this->current_segments.offsets[segment_start], &this->current_segments.offsets[segment_end]);
+                    this->split_context_recursive(&this->current_segments.offsets[segment_start], &this->current_segments.offsets[segment_end], 0);
                 }
 
                 segment_start = segment_end;
@@ -264,7 +264,7 @@ private:
         }
     }
 
-    void split_context_recursive(const int32_t * offsets, const int32_t * offsets_end)
+    void split_context_recursive(const int32_t * offsets, const int32_t * offsets_end, int32_t level)
     {
         assert(offsets_end - offsets > 0);
 
@@ -283,7 +283,7 @@ private:
         if (offsets_end - offsets >= OPTIMAL_ABT_SMALL_THRESHOLD && offsets_end - offsets <= OPTIMAL_ABT_LARGE_THRESHOLD)
         {
             this->build_optimal_alphabetic_tree(offsets, offsets_end);
-            this->traverse_alphabetic_tree(offsets, offsets_end, 0, (int32_t)(offsets_end - offsets) - 1);
+            this->traverse_alphabetic_tree(offsets, offsets_end, 0, (int32_t)(offsets_end - offsets) - 1, level);
             return;
         }
 
@@ -291,14 +291,20 @@ private:
             ? this->choose_context_pivot_using_heuristic(offsets, offsets_end)
             : &offsets[1];
 
-        this->split_context_by_pivot(offsets[0], offsets_pivot[0]);
-        this->split_context_recursive(offsets, offsets_pivot);
-        this->split_context_recursive(offsets_pivot, offsets_end);
+        this->split_context_by_pivot(offsets[0], offsets_pivot[0], level);
+        this->split_context_recursive(offsets, offsets_pivot, level + 1);
+        this->split_context_recursive(offsets_pivot, offsets_end, level + 1);
     }
 
-    void traverse_alphabetic_tree(const int32_t * offsets, const int32_t * offsets_end, int32_t l, int32_t r)
+    void traverse_alphabetic_tree(const int32_t * offsets, const int32_t * offsets_end, int32_t l, int32_t r, int32_t level)
     {
         assert(l <= r);
+
+        if (r - l < OPTIMAL_ABT_SMALL_THRESHOLD - 1)
+        {
+            split_context_recursive(&offsets[l], &offsets[r + 1], level);
+            return;
+        }
 
         if (l == r)
         {
@@ -314,9 +320,9 @@ private:
 
         int32_t offsets_pivot = this->alphabetic_tree_root[l][r];
 
-        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot + 1]);
-        this->traverse_alphabetic_tree(offsets, offsets_end, l, offsets_pivot);
-        this->traverse_alphabetic_tree(offsets, offsets_end, offsets_pivot + 1, r);
+        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot + 1], level);
+        this->traverse_alphabetic_tree(offsets, offsets_end, l, offsets_pivot, level + 1);
+        this->traverse_alphabetic_tree(offsets, offsets_end, offsets_pivot + 1, r, level + 1);
     }
 
     const int32_t * choose_context_pivot_using_heuristic(const int32_t * offsets, const int32_t * offsets_end)
@@ -329,17 +335,17 @@ private:
 
         if (offsets_count == 3)
         {
-            int64_t A = (int64_t)(offsets[1] ) - (int64_t)(context_begin);
-            int64_t C = (int64_t)(context_end) - (int64_t)(offsets[2]);
+            int64_t A = 1 + (int64_t)(offsets[1] ) - (int64_t)(context_begin);
+            int64_t C = 1 + (int64_t)(context_end) - (int64_t)(offsets[2]);
 
             return C <= A ? &offsets[1] : &offsets[2];
         }
         else if (offsets_count == 4)
         {
-            int64_t A = (int64_t)(offsets[1] ) - (int64_t)(context_begin);
-            int64_t B = (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
-            int64_t C = (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
-            int64_t D = (int64_t)(context_end) - (int64_t)(offsets[3]);
+            int64_t A = 1 + (int64_t)(offsets[1] ) - (int64_t)(context_begin);
+            int64_t B = 1 + (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
+            int64_t C = 1 + (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
+            int64_t D = 1 + (int64_t)(context_end) - (int64_t)(offsets[3]);
 
             const int32_t * offset1 = &offsets[1]; int64_t cost1 = pivot_cost3(B, C, D);
             const int32_t * offset2 = &offsets[2]; int64_t cost2 = A + B + C + D;
@@ -352,11 +358,11 @@ private:
         }
         else if (offsets_count == 5)
         {
-            int64_t A = (int64_t)(offsets[1] ) - (int64_t)(context_begin);
-            int64_t B = (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
-            int64_t C = (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
-            int64_t D = (int64_t)(offsets[4] ) - (int64_t)(offsets[3]);
-            int64_t E = (int64_t)(context_end) - (int64_t)(offsets[4]);
+            int64_t A = 1 + (int64_t)(offsets[1] ) - (int64_t)(context_begin);
+            int64_t B = 1 + (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
+            int64_t C = 1 + (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
+            int64_t D = 1 + (int64_t)(offsets[4] ) - (int64_t)(offsets[3]);
+            int64_t E = 1 + (int64_t)(context_end) - (int64_t)(offsets[4]);
 
             const int32_t * offset1 = &offsets[1]; int64_t cost1 = pivot_cost4(B, C, D, E);
             const int32_t * offset2 = &offsets[2]; int64_t cost2 = A + B + pivot_cost3(C, D, E);
@@ -371,12 +377,12 @@ private:
         }
         else if (offsets_count == 6)
         {
-            int64_t A = (int64_t)(offsets[1] ) - (int64_t)(context_begin);
-            int64_t B = (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
-            int64_t C = (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
-            int64_t D = (int64_t)(offsets[4] ) - (int64_t)(offsets[3]);
-            int64_t E = (int64_t)(offsets[5] ) - (int64_t)(offsets[4]);
-            int64_t F = (int64_t)(context_end) - (int64_t)(offsets[5]);
+            int64_t A = 1 + (int64_t)(offsets[1] ) - (int64_t)(context_begin);
+            int64_t B = 1 + (int64_t)(offsets[2] ) - (int64_t)(offsets[1]);
+            int64_t C = 1 + (int64_t)(offsets[3] ) - (int64_t)(offsets[2]);
+            int64_t D = 1 + (int64_t)(offsets[4] ) - (int64_t)(offsets[3]);
+            int64_t E = 1 + (int64_t)(offsets[5] ) - (int64_t)(offsets[4]);
+            int64_t F = 1 + (int64_t)(context_end) - (int64_t)(offsets[5]);
 
             const int32_t * offset1 = &offsets[1]; int64_t cost1 = pivot_cost5(B, C, D, E, F);
             const int32_t * offset2 = &offsets[2]; int64_t cost2 = A + B + pivot_cost4(C, D, E, F);
@@ -400,7 +406,7 @@ private:
                 {
                     int32_t segment_start = offsets[offsets_index];
 
-                    this->left_frequencies[offsets_index] = segment_end - segment_start; segment_end = segment_start;
+                    this->left_frequencies[offsets_index] = 1 + segment_end - segment_start; segment_end = segment_start;
                 }
 
                 hutucker_get_lengths(offsets_count, (unsigned long *)this->left_frequencies, this->hutucker_tmp);
@@ -428,11 +434,11 @@ private:
 
         assert(offsets_count >= OPTIMAL_ABT_SMALL_THRESHOLD && offsets_count <= OPTIMAL_ABT_LARGE_THRESHOLD);
 
-        this->alphabetic_tree_keys[offsets_count - 1] = offsets[0] + this->contexts[offsets[0]].count - offsets[offsets_count - 1];
+        this->alphabetic_tree_keys[offsets_count - 1] = 1 + offsets[0] + this->contexts[offsets[0]].count - offsets[offsets_count - 1];
 
         for (ptrdiff_t offsets_index = offsets_count - 2; offsets_index >= 0; --offsets_index)
         {
-            this->alphabetic_tree_keys[offsets_index] = offsets[offsets_index + 1] - offsets[offsets_index];
+            this->alphabetic_tree_keys[offsets_index] = 1 + offsets[offsets_index + 1] - offsets[offsets_index];
             this->alphabetic_tree_cost[offsets_index][offsets_index + 1] = this->alphabetic_tree_weight[offsets_index] = this->alphabetic_tree_keys[offsets_index] + this->alphabetic_tree_keys[offsets_index + 1];
         }
 
@@ -456,7 +462,7 @@ private:
         }
     }
 
-    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset)
+    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level)
     {
         symbol_context * parent_context = &this->contexts[parent_context_offset];
         int32_t parent_interval_size    = parent_context[0].count;
@@ -545,8 +551,8 @@ private:
                 if (total <= left_remaining + right_remaining - total)
                 {
                     count = left_remaining <= right_remaining
-                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index)
-                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index);
+                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
+                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
                 }
                 else
                 {
@@ -554,8 +560,8 @@ private:
                     count = left_remaining - count;
 
                     count = left_remaining <= right_remaining
-                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index)
-                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index);
+                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
+                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
 
                     count = left_remaining - count;
                     total = left_remaining + right_remaining - total;

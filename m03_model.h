@@ -219,7 +219,7 @@ protected:
 
     int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level)
     {
-        level = std::min(level, SYMBOL_HISTORY_MAX_DEPTH - 1); this->Symbol_history[symbol][level] = 0;
+        level = std::min(level, SYMBOL_HISTORY_MAX_DEPTH - 1); this->Symbol_history[symbol][level] = left_remaining == 0;
 
         int32_t inferred_right = std::max(total - left_remaining, 0);
         right_remaining -= inferred_right; total -= inferred_right;

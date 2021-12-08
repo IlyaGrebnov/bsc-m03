@@ -542,45 +542,42 @@ private:
 
         for (int32_t parent_symbol_index = 0; parent_symbol_index < parent_unique_symbols; ++parent_symbol_index)
         {
-            if (left_remaining > 0)
-            {
-                uint16_t symbol = parent_context[parent_symbol_index].symbol;
-                int32_t  total  = parent_context[parent_symbol_index].count;
-                int32_t  count  = left_frequencies[symbol];
+            uint16_t symbol = parent_context[parent_symbol_index].symbol;
+            int32_t  total  = parent_context[parent_symbol_index].count;
+            int32_t  count  = left_frequencies[symbol];
                 
-                if (total <= left_remaining + right_remaining - total)
-                {
-                    count = left_remaining <= right_remaining
-                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
-                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
-                }
-                else
-                {
-                    total = left_remaining + right_remaining - total;
-                    count = left_remaining - count;
+            if (total <= left_remaining + right_remaining - total)
+            {
+                count = left_remaining <= right_remaining
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
+            }
+            else
+            {
+                total = left_remaining + right_remaining - total;
+                count = left_remaining - count;
 
-                    count = left_remaining <= right_remaining
-                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
-                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
+                count = left_remaining <= right_remaining
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
 
-                    count = left_remaining - count;
-                    total = left_remaining + right_remaining - total;
-                }
+                count = left_remaining - count;
+                total = left_remaining + right_remaining - total;
+            }
 
-                left_remaining  = left_remaining  - count;
-                right_remaining = right_remaining + count - total;
+            left_remaining  = left_remaining  - count;
+            right_remaining = right_remaining + count - total;
 
-                if (count > 0)
-                {
-                    left_context[left_unique_symbols].count     = count;
-                    left_context[left_unique_symbols].offset    = parent_context[parent_symbol_index].offset;
-                    left_context[left_unique_symbols].symbol    = symbol;
+            if (count > 0)
+            {
+                left_context[left_unique_symbols].count     = count;
+                left_context[left_unique_symbols].offset    = parent_context[parent_symbol_index].offset;
+                left_context[left_unique_symbols].symbol    = symbol;
 
-                    parent_context[parent_symbol_index].count   -= count;
-                    parent_context[parent_symbol_index].offset  += count;
+                parent_context[parent_symbol_index].count   -= count;
+                parent_context[parent_symbol_index].offset  += count;
 
-                    left_unique_symbols++;
-                }
+                left_unique_symbols++;
             }
 
             if (parent_context[parent_symbol_index].count > 0)

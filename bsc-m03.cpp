@@ -409,7 +409,7 @@ static int print_usage()
 
 int main(int argc, const char * argv[])
 {
-    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.1.1 (7 December 2021).\n");
+    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.1.2 (7 December 2021).\n");
     fprintf(stdout, "Copyright (c) 2021 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
     fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco and Atsushi Komiya.\n\n");
 
@@ -433,7 +433,7 @@ int main(int argc, const char * argv[])
             case 'b':
             {
                 max_block_size = atoi(argv[i] + 2);
-                if (max_block_size <= 0) { return print_usage(); }
+                if (max_block_size <= 0 || max_block_size > 2047 * 1024 * 1024) { return print_usage(); }
 
                 break;
             }

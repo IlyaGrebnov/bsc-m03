@@ -229,7 +229,7 @@ static int compress_file(const char * input_file_name, const char * output_file_
     {
         if (FILE * output_file = fopen(output_file_name, "wb"))
         {
-            fseek(input_file, 0, SEEK_END); int64_t remaining_size = _ftelli64(input_file); rewind(input_file);
+            fseeko(input_file, 0, SEEK_END); int64_t remaining_size = ftello(input_file); rewind(input_file);
 
             if (uint8_t * buffer = (uint8_t *)malloc(std::min(remaining_size, (int64_t)max_block_size) * sizeof(uint8_t)))
             {
@@ -278,7 +278,7 @@ static int compress_file(const char * input_file_name, const char * output_file_
 
                 if (remaining_size == 0)
                 {
-                    fprintf(stdout, "\r%.55s compressed from %lld into %lld in %.3f seconds (%.3f bps).\n", input_file_name, input_bytes, output_bytes, ((double)clock() - start_time) / CLOCKS_PER_SEC, (8.0 * symbol_size * output_bytes) / input_bytes);
+                    fprintf(stdout, "\r%.55s compressed from %lld into %lld in %.3f seconds (%.3f bps).\n", input_file_name, (long long int)input_bytes, (long long int)output_bytes, ((double)clock() - start_time) / CLOCKS_PER_SEC, (8.0 * symbol_size * output_bytes) / input_bytes);
                 }
 
                 free(buffer);
@@ -315,7 +315,7 @@ static int decompress_file(const char * input_file_name, const char * output_fil
             int32_t max_block_size;
             if (fread(&max_block_size, sizeof(uint8_t), sizeof(max_block_size), input_file) == sizeof(max_block_size))
             {
-                fseek(input_file, 0, SEEK_END); int64_t remaining_size = _ftelli64(input_file); rewind(input_file);
+                fseeko(input_file, 0, SEEK_END); int64_t remaining_size = ftello(input_file); rewind(input_file);
 
                 if (uint8_t * buffer = (uint8_t *)malloc(max_block_size * sizeof(uint8_t)))
                 {
@@ -366,7 +366,7 @@ static int decompress_file(const char * input_file_name, const char * output_fil
 
                     if (remaining_size == 0)
                     {
-                        fprintf(stdout, "\r%.55s decompressed from %lld into %lld in %.3f seconds.\n", input_file_name, input_bytes, output_bytes, ((double)clock() - start_time) / CLOCKS_PER_SEC);
+                        fprintf(stdout, "\r%.55s decompressed from %lld into %lld in %.3f seconds.\n", input_file_name, (long long int)input_bytes, (long long int)output_bytes, ((double)clock() - start_time) / CLOCKS_PER_SEC);
                     }
 
                     free(buffer);

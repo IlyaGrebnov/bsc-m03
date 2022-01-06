@@ -38,6 +38,11 @@ NOTICE: This file has been modified for use in the bsc-m03 project.
 #ifndef _LIBBSC_PLATFORM_H
 #define _LIBBSC_PLATFORM_H
 
+#ifdef _MSC_VER
+    #define fseeko(stream, offset, origin) _fseeki64(stream, offset, origin)
+    #define ftello(stream) _ftelli64(stream)
+#endif
+
 #if defined(_MSC_VER)
     #include <intrin.h>
 #else

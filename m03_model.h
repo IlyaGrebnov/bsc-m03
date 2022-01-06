@@ -75,7 +75,7 @@ protected:
             {
                 int64_t min_value   = (1ll << (bit + 0)) - 1;
                 int64_t max_value   = (1ll << (bit + 1)) - 2;
-                int64_t min         = std::max(remaining_count - (remaining_max / (max_value + 1)), 0ll);
+                int64_t min         = std::max(remaining_count - (remaining_max / (max_value + 1)), (int64_t)0);
                 int64_t max         = remaining_count * max_value < remaining_min ? remaining_count - 1 : remaining_count;
 
                 this->coder->EncodeValue((unsigned int)min, (unsigned int)bit_freq[bit], (unsigned int)max);
@@ -153,7 +153,7 @@ protected:
             {
                 int64_t min_value   = (1ll << (bit + 0)) - 1;
                 int64_t max_value   = (1ll << (bit + 1)) - 2;
-                int64_t min         = std::max(remaining_count - (remaining_max / (max_value + 1)), 0ll);
+                int64_t min         = std::max(remaining_count - (remaining_max / (max_value + 1)), (int64_t)0);
                 int64_t max         = remaining_count * max_value < remaining_min ? remaining_count - 1 : remaining_count;
 
                 bit_freq[bit]       = this->coder->DecodeValue((unsigned int)min, (unsigned int)max);

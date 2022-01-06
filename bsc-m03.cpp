@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -45,18 +45,19 @@ This file is a part of bsc-m03 project.
 
 int32_t root_frequencies[MAX_ALPHABET_SIZE + 1];
 
-static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size, int32_t symbol_size)
+template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size)
 {
+    int32_t indexes[32]     = { -1 };
+    int32_t comressed_size  = -1;
+    int32_t symbol_size     = (int32_t)sizeof(symbol_t);
+    int32_t block_symbols   = block_size / symbol_size;
+    int32_t r               = next_power_of_2(std::max(block_symbols / 16, 1048576));
+
     if (block_size % symbol_size != 0)
     {
         fprintf(stderr, "\nError: Block size of %d bytes is not a multiple of symbol width!\n", block_size);
         return -2;
     }
-
-    int32_t indexes[32] = { -1 };
-    int32_t comressed_size = -1;
-    int32_t block_symbols = block_size / symbol_size;
-    int32_t r = next_power_of_2(std::max(block_symbols / 16, 1048576));
 
     if (int32_t * libsais_temp = (int32_t *)malloc(block_symbols * sizeof(int32_t)))
     {
@@ -68,23 +69,15 @@ static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size, int32
 
         if (result == 0)
         {
-            if (uint16_t * L = (uint16_t *)malloc(((size_t)block_symbols + 1) * sizeof(uint16_t)))
+            if (symbol_t * L = (symbol_t *)malloc(((size_t)block_symbols + 1) * sizeof(symbol_t)))
             {
-                if (m03_parser * parser = (m03_parser *)malloc(sizeof(m03_parser)))
+                if (m03_parser<symbol_t> * parser = (m03_parser<symbol_t> *)malloc(sizeof(m03_parser<symbol_t>)))
                 {
                     {
                         int32_t primary_index = indexes[0];
 
-                        if (symbol_size == 1)
-                        {
-                            for (int32_t p = 0; p < primary_index; ++p)             { L[p + 0] = ((uint16_t)buffer[p]); }
-                            for (int32_t p = primary_index; p < block_symbols; ++p) { L[p + 1] = ((uint16_t)buffer[p]); }
-                        }
-                        else
-                        {
-                            for (int32_t p = 0; p < primary_index; ++p)             { L[p + 0] = ((uint16_t *)buffer)[p]; }
-                            for (int32_t p = primary_index; p < block_symbols; ++p) { L[p + 1] = ((uint16_t *)buffer)[p]; }
-                        }
+                        memcpy(&L[0]                , &((symbol_t *)buffer)[0]            , primary_index * sizeof(symbol_t));
+                        memcpy(&L[primary_index + 1], &((symbol_t *)buffer)[primary_index], ((size_t)block_symbols - (size_t)primary_index) * sizeof(symbol_t));
 
                         L[primary_index] = 0;
                     }
@@ -98,7 +91,7 @@ static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size, int32
                         coder.EncodeValue(1, indexes[t], block_symbols);
                     }
 
-                    if (parser->initialize(L, block_symbols + 1, indexes[0], root_frequencies, symbol_size == 1 ? 256 : 256 * 256, &coder, m03_mode::encoding))
+                    if (parser->initialize(L, block_symbols + 1, indexes[0], root_frequencies, 1 << (8 * symbol_size), &coder, m03_mode::encoding))
                     {
                         parser->run();
                         parser->destroy();
@@ -137,45 +130,26 @@ static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size, int32
     return comressed_size;
 }
 
-static int32_t decompress_memory_block(uint8_t * buffer, int32_t comressed_size, int32_t block_size)
+template <class symbol_t> static int32_t decompress_burrows_wheeler_transform(RangeCoder * coder, int32_t primary_index, int32_t block_size, uint8_t * buffer)
 {
-    RangeCoder coder;
-    coder.InitDecoder(buffer);
-    int32_t symbol_size = coder.DecodeValue(1, 2);
+    int32_t result          = -1;
+    int32_t symbol_size     = (int32_t)sizeof(symbol_t);
+    int32_t block_symbols   = block_size / symbol_size;
 
-    int32_t indexes[32] = { -1 };
-    int32_t primary_index = -1;
-    int32_t decomressed_size = -1;
-    int32_t block_symbols = block_size / symbol_size;
-    int32_t r = next_power_of_2(std::max(block_symbols / 16, 1048576));
-
-    for (int32_t t = 0; t <= (block_symbols - 1) / r; ++t)
+    if (symbol_t * L = (symbol_t *)malloc(((size_t)block_symbols + 1) * sizeof(symbol_t)))
     {
-        indexes[t] = coder.DecodeValue(1, block_symbols);
-    }
-
-    if (uint16_t * L = (uint16_t *)malloc(((size_t)block_symbols + 1) * sizeof(uint16_t)))
-    {
-        if (m03_parser * parser = (m03_parser *)malloc(sizeof(m03_parser)))
+        if (m03_parser<symbol_t> * parser = (m03_parser<symbol_t> *)malloc(sizeof(m03_parser<symbol_t>)))
         {
-            if (parser->initialize(L, block_symbols + 1, indexes[0], root_frequencies, symbol_size == 1 ? 256 : 256 * 256, &coder, m03_mode::decoding))
+            if (parser->initialize(L, block_symbols + 1, primary_index, root_frequencies, 1 << (8 * symbol_size), coder, m03_mode::decoding))
             {
                 parser->run();
                 parser->destroy();
 
                 {
-                    primary_index = indexes[0];
+                    memcpy(&((symbol_t *)buffer)[0]            , &L[0]                , primary_index * sizeof(symbol_t));
+                    memcpy(&((symbol_t *)buffer)[primary_index], &L[primary_index + 1], ((size_t)block_symbols - (size_t)primary_index) * sizeof(symbol_t));
 
-                    if (symbol_size == 1)
-                    {
-                        for (int32_t p = 0; p < primary_index; ++p)             { buffer[p] = (uint8_t)L[p + 0]; }
-                        for (int32_t p = primary_index; p < block_symbols; ++p) { buffer[p] = (uint8_t)L[p + 1]; }
-                    }
-                    else
-                    {
-                        for (int32_t p = 0; p < primary_index; ++p)             { ((uint16_t *)buffer)[p] = L[p + 0]; }
-                        for (int32_t p = primary_index; p < block_symbols; ++p) { ((uint16_t *)buffer)[p] = L[p + 1]; }
-                    }
+                    result = 0;
                 }
             }
             else
@@ -197,11 +171,34 @@ static int32_t decompress_memory_block(uint8_t * buffer, int32_t comressed_size,
         fprintf(stderr, "\nError: Not enough memory!\n");
     }
 
-    if (primary_index > 0)
+    return result;
+}
+
+static int32_t decompress_memory_block(uint8_t * buffer, int32_t comressed_size, int32_t block_size)
+{
+    RangeCoder coder;
+    coder.InitDecoder(buffer);
+
+    int32_t indexes[32]         = { -1 };
+    int32_t decomressed_size    = -1;
+    int32_t symbol_size         = coder.DecodeValue(1, 2);
+    int32_t block_symbols       = block_size / symbol_size;
+    int32_t r                   = next_power_of_2(std::max(block_symbols / 16, 1048576));
+
+    for (int32_t t = 0; t <= (block_symbols - 1) / r; ++t)
+    {
+        indexes[t] = coder.DecodeValue(1, block_symbols);
+    }
+
+    int32_t result = symbol_size == 1
+        ? decompress_burrows_wheeler_transform<uint8_t> (&coder, indexes[0], block_size, buffer)
+        : decompress_burrows_wheeler_transform<uint16_t>(&coder, indexes[0], block_size, buffer);
+    
+    if (result == 0)
     {
         if (int32_t * libsais_temp = (int32_t *)malloc(((size_t)block_symbols + 1) * sizeof(int32_t)))
         {
-            int32_t result = symbol_size == 1
+            result = symbol_size == 1
                 ? libsais_unbwt_aux(buffer, buffer, libsais_temp, block_symbols, root_frequencies, r, indexes)
                 : libsais16_unbwt_aux((uint16_t *)buffer, (uint16_t *)buffer, libsais_temp, block_symbols, root_frequencies, r, indexes);
 
@@ -250,7 +247,10 @@ static int compress_file(const char * input_file_name, const char * output_file_
                         break;
                     }
 
-                    int32_t comressed_size = compress_memory_block(buffer, block_size, symbol_size);
+                    int32_t comressed_size = symbol_size == 1 
+                        ? compress_memory_block<uint8_t> (buffer, block_size) 
+                        : compress_memory_block<uint16_t>(buffer, block_size);
+
                     if (comressed_size <= 0) { break; }
 
                     if (fwrite(&block_size, sizeof(uint8_t), sizeof(block_size), output_file) != sizeof(block_size))
@@ -401,7 +401,7 @@ static int decompress_file(const char * input_file_name, const char * output_fil
 static int print_usage()
 {
     fprintf(stdout, "Usage: bsc-m03 <e|d> input-file output-file <options>\n");
-    fprintf(stdout, "  -b<size> Block size in bytes, default 128MB (memory usage is ~15x).\n");
+    fprintf(stdout, "  -b<size> Block size in bytes, default 128MB (memory usage is ~13x).\n");
     fprintf(stdout, "  -w<8|16> Symbol width in bits.\n");
 
     return 0;
@@ -409,9 +409,9 @@ static int print_usage()
 
 int main(int argc, const char * argv[])
 {
-    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.1.2 (7 December 2021).\n");
-    fprintf(stdout, "Copyright (c) 2021 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
-    fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco and Atsushi Komiya.\n\n");
+    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.2.0 (05 January 2022).\n");
+    fprintf(stdout, "Copyright (c) 2021-2022 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
+    fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco (see AUTHORS).\n\n");
 
     int32_t max_block_size  = 128 * 1024 * 1024;
     int32_t symbol_width    = 8;

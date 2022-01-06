@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,17 +40,6 @@ This file is a part of bsc-m03 project.
 #pragma warning( push )
 #pragma warning( disable : 6385 )
 #pragma warning( disable : 6386 )
-
-#pragma pack(push, 1)
-
-typedef struct symbol_context
-{
-    int32_t     count;
-    int32_t     offset;
-    uint16_t    symbol;
-} symbol_context;
-
-#pragma pack(pop)
 
 typedef struct offset_queue
 {
@@ -93,11 +82,12 @@ typedef struct offset_queue
 
 } offset_queue;
 
+template <class symbol_t>
 class m03_parser: m03_model
 {
 public:
 
-    bool initialize(uint16_t * L, int32_t n, int32_t primary_index, int32_t * root_frequencies, int32_t k, RangeCoder * coder, m03_mode mode)
+    bool initialize(symbol_t * L, int32_t n, int32_t primary_index, int32_t * root_frequencies, int32_t k, RangeCoder * coder, m03_mode mode)
     {
         memset(this, 0, sizeof(m03_parser));
 
@@ -175,7 +165,18 @@ public:
 
 private:
 
-    uint16_t *          L;
+#pragma pack(push, 1)
+
+    typedef struct symbol_context
+    {
+        int32_t     count;
+        int32_t     offset;
+        symbol_t    symbol;
+    } symbol_context;
+
+#pragma pack(pop)
+
+    symbol_t *          L;
     int32_t             n;
     int32_t             primary_index;
     int32_t *           root_frequencies;
@@ -291,7 +292,7 @@ private:
             ? this->choose_context_pivot_using_heuristic(offsets, offsets_end)
             : &offsets[1];
 
-        this->split_context_by_pivot(offsets[0], offsets_pivot[0], level);
+        this->split_context_by_pivot(offsets[0], offsets_pivot[0], level, (offsets_pivot - offsets) == 1, (offsets_end - offsets_pivot) == 1);
         this->split_context_recursive(offsets, offsets_pivot, level + 1);
         this->split_context_recursive(offsets_pivot, offsets_end, level + 1);
     }
@@ -320,7 +321,7 @@ private:
 
         int32_t offsets_pivot = this->alphabetic_tree_root[l][r];
 
-        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot + 1], level);
+        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot + 1], level, (offsets_pivot - l) == 0, (r - offsets_pivot) == 1);
         this->traverse_alphabetic_tree(offsets, offsets_end, l, offsets_pivot, level + 1);
         this->traverse_alphabetic_tree(offsets, offsets_end, offsets_pivot + 1, r, level + 1);
     }
@@ -462,7 +463,7 @@ private:
         }
     }
 
-    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level)
+    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level, int32_t left_leaf, int32_t right_leaf)
     {
         symbol_context * parent_context = &this->contexts[parent_context_offset];
         int32_t parent_interval_size    = parent_context[0].count;
@@ -542,15 +543,15 @@ private:
 
         for (int32_t parent_symbol_index = 0; parent_symbol_index < parent_unique_symbols; ++parent_symbol_index)
         {
-            uint16_t symbol = parent_context[parent_symbol_index].symbol;
+            symbol_t symbol = parent_context[parent_symbol_index].symbol;
             int32_t  total  = parent_context[parent_symbol_index].count;
             int32_t  count  = left_frequencies[symbol];
                 
             if (total <= left_remaining + right_remaining - total)
             {
                 count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf);
             }
             else
             {
@@ -558,8 +559,8 @@ private:
                 count = left_remaining - count;
 
                 count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level);
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf);
 
                 count = left_remaining - count;
                 total = left_remaining + right_remaining - total;

@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,10 +25,12 @@ This file is a part of bsc-m03 project.
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include "common/platform.h"
 #include "common/rangecoder.h"
 
-#include <algorithm>
+#include "m03_tables.h"
 
 #pragma warning( push )
 #pragma warning( disable : 6385 )
@@ -48,10 +50,10 @@ protected:
         this->coder = coder;
         this->mode  = mode;
 
-        for (int32_t s = 0; s < 3072; ++s) { T1_model[s][0] = T1_model[s][1] = 1; }
-        for (int32_t s = 0; s < 3072; ++s) { T2_model[s][0] = T2_model[s][1] = T2_model[s][2] = T2_model[s][3] = 1; }
-        for (int32_t s = 0; s < 1536; ++s) { Ternary_model[s][0] = Ternary_model[s][1] = Ternary_model[s][2] = Ternary_model[s][3] = 1; }
-        for (int32_t s = 0; s < 96  ; ++s) { for (int32_t c = 0; c < 16; ++c) { Tree_model[s][c] = 1; } }
+        this->memset_uint16(this->T1_model        , 1, sizeof(this->T1_model));
+        this->memset_uint16(this->T2_model        , 1, sizeof(this->T2_model));
+        this->memset_uint16(this->Ternary_model   , 1, sizeof(this->Ternary_model));
+        this->memset_uint16(this->Tree_model      , 1, sizeof(this->Tree_model));
     }
 
     void encode_root_frequencies(const int32_t * root_frequencies, int32_t k, int32_t n)
@@ -217,41 +219,43 @@ protected:
         }
     }
 
-    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level)
+    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level, int32_t leaf_node)
     {
         level = std::min(level, SYMBOL_HISTORY_MAX_DEPTH - 1); this->Symbol_history[symbol][level] = left_remaining == 0;
 
-        int32_t inferred_right = std::max(total - left_remaining, 0);
-        right_remaining -= inferred_right; total -= inferred_right;
-
-        assert(total <= right_remaining);
+        int32_t inferred_right = std::max(total - left_remaining, 0); total -= inferred_right;
 
         if (total > 0)
         {
-            int32_t history =
+            right_remaining -= inferred_right << 1;
+
+            assert(right_remaining > 0); assert(total <= left_remaining); assert(left_remaining <= right_remaining);
+
+            int32_t pivot_history =
                 level > 1 ? this->Symbol_history[symbol][level - 1] | this->Symbol_history[symbol][level - 2] :
                 level > 0 ? this->Symbol_history[symbol][level - 1] : 0;
 
             if (total <= 2)
             {
                 int32_t state = 0;
-                state += 1   * (std::min((int32_t)symbols_remaining - 2, 5));
-                state += 8   * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
-                state += 32  * (left_remaining + right_remaining == symbols_remaining);
-                state += 64  * (left_remaining == total);
-                state += 128 * (history);
-                state += 256 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+                state += 1   * (left_remaining + right_remaining + inferred_right == symbols_remaining);
+                state += 2   * (left_remaining == total);
+                state += 4   * (pivot_history);
+                state += 8   * (leaf_node);
+                state += 16  * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
+                state += 64  * (std::min((int32_t)symbols_remaining - 2, 7));
+                state += 512 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
 
                 if (total == 1)
                 {
-                    static const int threshold[12] = { 147, 251, 374, 540, 761, 763, 1589, 2275, 2193, 3457, 3811, 1017 };
+                    state = m03_T1_model_state_table[state];
 
-                    uint16_t * RESTRICT predictor = &this->T1_model[state & 0xffffff7f][0];
+                    uint16_t * RESTRICT predictor = &this->T1_model[state][0];
 
-                    if (predictor[0] + predictor[1] > threshold[state >> 8])
+                    if (predictor[0] + predictor[1] > m03_T1_model_scale_table[state])
                     {
-                        predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
-                        predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
+                        predictor[0] = (predictor[0] + 1) >> 1;
+                        predictor[1] = (predictor[1] + 1) >> 1;
                     }
 
                     if (this->mode == m03_mode::encoding)
@@ -266,19 +270,19 @@ protected:
                         this->coder->Decode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
                     }
 
-                    predictor[count]++;
+                    predictor[count]++; this->Symbol_history[symbol][level] = 1;
                 }
                 else
                 {
-                    static const int threshold[12] = { 149, 221, 255, 287, 292, 343, 494, 396, 655, 820, 2984, 225 };
+                    state = m03_T2_model_state_table[state];
 
                     uint16_t * RESTRICT predictor = &this->T2_model[state][0];
 
-                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 8])
+                    if (predictor[0] + predictor[1] + predictor[2] > m03_T2_model_scale_table[state])
                     {
-                        predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
-                        predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
-                        predictor[2] = (predictor[2] + (predictor[2] < 2)) >> 1;
+                        predictor[0] = (predictor[0] + 1) >> 1;
+                        predictor[1] = (predictor[1] + 1) >> 1;
+                        predictor[2] = (predictor[2] + 1) >> 1;
                     }
 
                     if (this->mode == m03_mode::encoding)
@@ -304,31 +308,24 @@ protected:
                 int32_t pivot = (count > 0) + (count == total);
 
                 {
-                    static const int threshold[48] = 
-                    { 
-                        142, 129, 115, 89 , 70 , 59 , 53 , 44,
-                        243, 167, 132, 105, 98 , 109, 107, 134,
-                        247, 200, 162, 134, 137, 149, 201, 262,
-                        339, 253, 184, 171, 235, 288, 299, 348,
-                        512, 396, 178, 357, 466, 484, 697, 587,
-                        220, 157, 144, 167, 219, 141, 228, 1076,
-                    };
-
                     int32_t state = 0;
                     state += 1   * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
                     state += 4   * (inferred_right > 0);
                     state += 8   * (left_remaining == total);
-                    state += 16  * (history);
-                    state += 32  * (std::min((int32_t)bit_scan_reverse(total - 2), 7));
-                    state += 256 * (((int64_t)left_remaining * 9 + right_remaining) / ((int64_t)right_remaining * 2));
+                    state += 16  * (leaf_node);
+                    state += 32  * (pivot_history);
+                    state += 64  * (std::min((int32_t)bit_scan_reverse(total - 2), 7));
+                    state += 512 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+                       
+                    state = m03_Ternary_model_state_table[state];
 
                     uint16_t * RESTRICT predictor = &this->Ternary_model[state][0];
 
-                    if (predictor[0] + predictor[1] + predictor[2] > threshold[state >> 5])
+                    if (predictor[0] + predictor[1] + predictor[2] > m03_Ternary_model_scale_table[state])
                     {
-                        predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
-                        predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
-                        predictor[2] = (predictor[2] + (predictor[2] < 2)) >> 1;
+                        predictor[0] = (predictor[0] + 1) >> 1;
+                        predictor[1] = (predictor[1] + 1) >> 1;
+                        predictor[2] = (predictor[2] + 1) >> 1;
                     }
 
                     if (this->mode == m03_mode::encoding)
@@ -351,30 +348,23 @@ protected:
 
                 if (pivot == 1)
                 {
-                    static const int threshold[48] =
-                    {
-                        275 , 167 , 218 , 163, 200, 123, 143, 61,
-                        515 , 335 , 344 , 268, 320, 244, 235, 85,
-                        863 , 474 , 527 , 387, 401, 298, 263, 107,
-                        1920, 968 , 629 , 500, 554, 286, 358, 121,
-                        3655, 1157, 1021, 623, 591, 365, 317, 109,
-                        2922, 249 , 776 , 159, 537, 133, 253, 158,
-                    };
-
                     int32_t state = 0;
-                    state += 1  * (inferred_right >= total);
-                    state += 2  * (std::min(total - 3, 7));
-                    state += 16 * (((int64_t)left_remaining * 5) / ((int64_t)right_remaining));
+                    state += 1 * (inferred_right >= total);
+                    state += 2 * (pivot_history);
+                    state += 4  * (std::min(total - 3, 15));
+                    state += 64 * (((int64_t)left_remaining * 5) / ((int64_t)right_remaining));
 
                     int32_t min = 1, max = total - 1, context = 1;
-                    while (min != max && context < 8)
+                    while (min != max && context < 16)
                     {
-                        uint16_t * RESTRICT predictor = &this->Tree_model[state][2 * context];
+                        ptrdiff_t bucket = m03_Tree_model_state_table[state * 16 + context];
 
-                        if (predictor[0] + predictor[1] > threshold[state >> 1])
+                        uint16_t * RESTRICT predictor = &this->Tree_model[bucket][0];
+
+                        if (predictor[0] + predictor[1] > m03_Tree_model_scale_table[bucket])
                         {
-                            predictor[0] = (predictor[0] + (predictor[0] < 2)) >> 1;
-                            predictor[1] = (predictor[1] + (predictor[1] < 2)) >> 1;
+                            predictor[0] = (predictor[0] + 1) >> 1;
+                            predictor[1] = (predictor[1] + 1) >> 1;
                         }
 
                         int32_t median = min + ((max - min + 1) >> 1), bit = count >= median;
@@ -409,12 +399,17 @@ protected:
 private:
     RangeCoder *    coder;
 
-    uint16_t        T1_model[3072][2];
-    uint16_t        T2_model[3072][4];
-    uint16_t        Ternary_model[1536][4];
-    uint16_t        Tree_model[96][16];
+    uint16_t        T1_model[96][2];
+    uint16_t        T2_model[96][4];
+    uint16_t        Ternary_model[192][4];
+    uint16_t        Tree_model[256][2];
 
     uint8_t         Symbol_history[MAX_ALPHABET_SIZE][SYMBOL_HISTORY_MAX_DEPTH];
+
+    void memset_uint16(void * RESTRICT dst, uint16_t v, size_t size)
+    {
+        for (size_t i = 0; i < size / 2; ++i) { ((uint16_t *)dst)[i] = v; }
+    }
 };
 
 #pragma warning( pop )

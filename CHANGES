@@ -1,3 +1,7 @@
+* 2022-01-05 : Version 0.2
+  * Improved compression.
+  * Reduced memory usage from 15x to 13x.
+
 * 2021-12-07 : Version 0.1.1 - 0.1.2
   * Slightly improved compression using symbols history.
 

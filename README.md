@@ -7,7 +7,7 @@ The bsc-m03 is experimental block sorting compressor based on M03 context aware 
 Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
 
 ## License
-The libsais is released under the [GNU General Public License](LICENSE "GNU General Public License")
+The bsc-m03 is released under the [GNU General Public License](LICENSE "GNU General Public License")
 
 ## Changes
 * 2022-01-05 : Version 0.2

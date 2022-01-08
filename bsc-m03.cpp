@@ -409,7 +409,7 @@ static int print_usage()
 
 int main(int argc, const char * argv[])
 {
-    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.2.0 (05 January 2022).\n");
+    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.2.1 (08 January 2022).\n");
     fprintf(stdout, "Copyright (c) 2021-2022 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
     fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco (see AUTHORS).\n\n");
 

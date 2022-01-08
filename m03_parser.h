@@ -31,6 +31,7 @@ This file is a part of bsc-m03 project.
 #include "common/rangecoder.h"
 
 #include "hutucker/hu-tucker.h"
+#include "ska_sort/ska_sort.hpp"
 
 #include "m03_model.h"
 
@@ -68,7 +69,7 @@ typedef struct offset_queue
 
     INLINE void reset() { this->count = 0; }
 
-    INLINE void sort() { std::stable_sort(this->offsets, this->offsets + this->count); }
+    INLINE void sort() { ska_sort(this->offsets, this->offsets + this->count); }
 
     NOINLINE int32_t * resize()
     {
@@ -479,7 +480,7 @@ private:
 
         if (this->mode == m03_mode::encoding)
         {
-            if (left_interval_size <= parent_interval_size - left_interval_size)
+            if (left_interval_size <= right_interval_size)
             {
                 int32_t parent_total_symbols = parent_interval_size;
 
@@ -495,9 +496,9 @@ private:
                 assert(parent_total_symbols > 0); parent_context[0].count = parent_total_symbols;
                 left_frequencies[parent_context[0].symbol] = 0;
 
-                for (int32_t p = parent_context_offset; p < right_context_offset; ++p) { left_frequencies[L[p]]++; }
-
                 left_frequencies[0] -= ((uint32_t)(this->primary_index - parent_context_offset) < (uint32_t)left_interval_size);
+
+                for (int32_t p = parent_context_offset; p < parent_context_offset + left_interval_size; ++p) { left_frequencies[L[p]]++; }
             }
             else
             {
@@ -515,9 +516,9 @@ private:
                 assert(parent_total_symbols > 0); parent_context[0].count = parent_total_symbols;
                 left_frequencies[parent_context[0].symbol] = parent_total_symbols;
 
-                for (int32_t p = right_context_offset; p < parent_context_offset + parent_interval_size; ++p) { left_frequencies[L[p]]--; }
-
                 left_frequencies[0] += ((uint32_t)(this->primary_index - right_context_offset) < (uint32_t)right_interval_size);
+
+                for (int32_t p = right_context_offset; p < right_context_offset + right_interval_size; ++p) { left_frequencies[L[p]]--; }
             }
         }
         else

@@ -10,6 +10,8 @@ Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
 The libsais is released under the [GNU General Public License](LICENSE "GNU General Public License")
 
 ## Changes
+* 2022-01-08 : Version 0.2.1
+  * Replaced std::stable_sort with ska_sort.
 * 2022-01-05 : Version 0.2
   * Improved compression.
   * Reduced memory usage from 15x to 13x.

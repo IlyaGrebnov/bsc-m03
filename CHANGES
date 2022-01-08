@@ -1,3 +1,6 @@
+* 2022-01-08 : Version 0.2.1
+  * Replaced std::stable_sort with ska_sort.
+
 * 2022-01-05 : Version 0.2
   * Improved compression.
   * Reduced memory usage from 15x to 13x.

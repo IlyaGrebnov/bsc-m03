@@ -193,7 +193,7 @@ static int32_t decompress_memory_block(uint8_t * buffer, int32_t comressed_size,
     int32_t result = symbol_size == 1
         ? decompress_burrows_wheeler_transform<uint8_t> (&coder, indexes[0], block_size, buffer)
         : decompress_burrows_wheeler_transform<uint16_t>(&coder, indexes[0], block_size, buffer);
-    
+
     if (result == 0)
     {
         if (int32_t * libsais_temp = (int32_t *)malloc(((size_t)block_symbols + 1) * sizeof(int32_t)))
@@ -237,7 +237,7 @@ static int compress_file(const char * input_file_name, const char * output_file_
 
                 while (remaining_size > 0)
                 {
-                    fprintf(stdout, "\rCompressing %.55s(%02d%%)", input_file_name, (int)((input_bytes * 100) / (input_bytes + remaining_size)));
+                    fprintf(stdout, "\rCompressing %.55s(%02d%%)", input_file_name, (int)((input_bytes * 100) / (input_bytes + remaining_size))); fflush(stdout);
 
                     int32_t block_size = (int32_t)std::min(remaining_size, (int64_t)max_block_size);
 
@@ -323,7 +323,7 @@ static int decompress_file(const char * input_file_name, const char * output_fil
 
                     while (remaining_size > 0)
                     {
-                        fprintf(stdout, "\rDecompressing %.55s(%02d%%)", input_file_name, (int)((input_bytes * 100) / (input_bytes + remaining_size)));
+                        fprintf(stdout, "\rDecompressing %.55s(%02d%%)", input_file_name, (int)((input_bytes * 100) / (input_bytes + remaining_size))); fflush(stdout);
 
                         int32_t block_size, comressed_size;
                         if (fread(&block_size, sizeof(uint8_t), sizeof(block_size), input_file) != sizeof(block_size))
@@ -423,9 +423,9 @@ int main(int argc, const char * argv[])
 
     for (int32_t i = 4; i < argc; ++i)
     {
-        if (argv[i][0] != '-') 
-        { 
-            return print_usage(); 
+        if (argv[i][0] != '-')
+        {
+            return print_usage();
         }
 
         switch (argv[i][1])

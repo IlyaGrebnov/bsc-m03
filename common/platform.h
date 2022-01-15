@@ -45,8 +45,8 @@ NOTICE: This file has been modified for use in the bsc-m03 project.
 
 #if defined(_MSC_VER)
     #include <intrin.h>
-#else
-    #include <immintrin.h>
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+    #include <x86intrin.h>
 #endif
 
 #if defined(__GNUC__)

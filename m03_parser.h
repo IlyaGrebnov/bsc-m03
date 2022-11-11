@@ -302,15 +302,9 @@ private:
     {
         assert(l <= r);
 
-        if (r - l < OPTIMAL_ABT_SMALL_THRESHOLD - 1)
+        if (r + 1 - l < OPTIMAL_ABT_SMALL_THRESHOLD)
         {
             split_context_recursive(&offsets[l], &offsets[r + 1], level);
-            return;
-        }
-
-        if (l == r)
-        {
-            m03_parser::populate_next_segments(&this->contexts[offsets[l]], &this->contexts[this->primary_index], &this->parent_frequencies[0], this->next_segments);
             return;
         }
 
@@ -551,8 +545,8 @@ private:
             if (total <= left_remaining + right_remaining - total)
             {
                 count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf);
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf, right_leaf)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf, left_leaf);
             }
             else
             {
@@ -560,8 +554,8 @@ private:
                 count = left_remaining - count;
 
                 count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf);
+                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf, left_leaf)
+                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf, right_leaf);
 
                 count = left_remaining - count;
                 total = left_remaining + right_remaining - total;

@@ -51,9 +51,17 @@ protected:
         this->mode  = mode;
 
         this->memset_uint16(this->T1_model        , 1, sizeof(this->T1_model));
-        this->memset_uint16(this->T2_model        , 1, sizeof(this->T2_model));
-        this->memset_uint16(this->Ternary_model   , 1, sizeof(this->Ternary_model));
-        this->memset_uint16(this->Tree_model      , 1, sizeof(this->Tree_model));
+
+        this->memset_uint16(this->T2_model_m0     , 1, sizeof(this->T2_model_m0));
+        this->memset_uint16(this->T2_model_m1     , 1, sizeof(this->T2_model_m1));
+
+        this->memset_uint16(this->T3_model_m0     , 1, sizeof(this->T2_model_m0));
+        this->memset_uint16(this->T3_model_m1     , 1, sizeof(this->T3_model_m1));
+        this->memset_uint16(this->T3_model_m2     , 1, sizeof(this->T3_model_m2));
+
+        this->memset_uint16(this->Tx_model_m0     , 1, sizeof(this->Tx_model_m0));
+        this->memset_uint16(this->Tx_model_m1     , 1, sizeof(this->Tx_model_m1));
+        this->memset_uint16(this->Tx_model_m2     , 1, sizeof(this->Tx_model_m2));
     }
 
     void encode_root_frequencies(const int32_t * root_frequencies, int32_t k, int32_t n)
@@ -219,7 +227,7 @@ protected:
         }
     }
 
-    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level, int32_t leaf_node)
+    int32_t predict(int32_t count, int32_t total, int32_t left_remaining, int32_t right_remaining, int32_t symbols_remaining, int32_t symbol, int32_t level, int32_t left_leaf, int32_t right_leaf)
     {
         level = std::min(level, SYMBOL_HISTORY_MAX_DEPTH - 1); this->Symbol_history[symbol][level] = left_remaining == 0;
 
@@ -235,23 +243,23 @@ protected:
                 level > 1 ? this->Symbol_history[symbol][level - 1] | this->Symbol_history[symbol][level - 2] :
                 level > 0 ? this->Symbol_history[symbol][level - 1] : 0;
 
-            if (total <= 2)
+            if (total <= 3)
             {
                 int32_t state = 0;
-                state += 1   * (left_remaining + right_remaining + inferred_right == symbols_remaining);
-                state += 2   * (left_remaining == total);
-                state += 4   * (pivot_history);
-                state += 8   * (leaf_node);
-                state += 16  * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
-                state += 64  * (std::min((int32_t)symbols_remaining - 2, 7));
-                state += 512 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+                state += 1 * (left_remaining + right_remaining + inferred_right == symbols_remaining);
+                state += 2 * (left_remaining == total);
+                state += 4 * (pivot_history);
+                state += 8 * (left_leaf);
+                state += 16 * (right_leaf);
+                state += 32 * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
+                state += 128 * (std::min((int32_t)symbols_remaining - 2, 7));
+                state += 1024 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
 
                 if (total == 1)
                 {
                     state = m03_T1_model_state_table[state];
 
                     uint16_t * RESTRICT predictor = &this->T1_model[state][0];
-
                     if (predictor[0] + predictor[1] > m03_T1_model_scale_table[state])
                     {
                         predictor[0] = (predictor[0] + 1) >> 1;
@@ -272,96 +280,251 @@ protected:
 
                     predictor[count]++; this->Symbol_history[symbol][level] = 1;
                 }
-                else
+                else if (total == 2)
                 {
-                    state = m03_T2_model_state_table[state];
+                    int32_t pivot = (count == 0) | (count == 2);
 
-                    uint16_t * RESTRICT predictor = &this->T2_model[state][0];
-
-                    if (predictor[0] + predictor[1] + predictor[2] > m03_T2_model_scale_table[state])
                     {
-                        predictor[0] = (predictor[0] + 1) >> 1;
-                        predictor[1] = (predictor[1] + 1) >> 1;
-                        predictor[2] = (predictor[2] + 1) >> 1;
+                        ptrdiff_t bucket = m03_T2_model_m0_state_table[state];
+
+                        uint16_t * RESTRICT predictor = &this->T2_model_m0[bucket][0];
+                        if (predictor[0] + predictor[1] > m03_T2_model_m0_scale_table[bucket])
+                        {
+                            predictor[0] = (predictor[0] + 1) >> 1;
+                            predictor[1] = (predictor[1] + 1) >> 1;
+                        }
+
+                        if (this->mode == m03_mode::encoding)
+                        {
+                            this->coder->Encode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
+                        }
+                        else
+                        {
+                            unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                            pivot = cum_freq >= predictor[0];
+                            this->coder->Decode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
+                        }
+
+                        predictor[pivot]++; this->Symbol_history[symbol][level] = pivot;
                     }
 
-                    if (this->mode == m03_mode::encoding)
+                    if (pivot)
                     {
-                        unsigned int cum_freq = count == 0 ? 0 : count == 1 ? predictor[0] : predictor[0] + predictor[1];
-                        this->coder->Encode(cum_freq, predictor[count], predictor[0] + predictor[1] + predictor[2]);
+                        count = count > 0;
+
+                        {
+                            ptrdiff_t bucket = m03_T2_model_m1_state_table[state];
+
+                            uint16_t * RESTRICT predictor = &this->T2_model_m1[bucket][0];
+                            if (predictor[0] + predictor[1] > m03_T2_model_m1_scale_table[bucket])
+                            {
+                                predictor[0] = (predictor[0] + 1) >> 1;
+                                predictor[1] = (predictor[1] + 1) >> 1;
+                            }
+
+                            if (this->mode == m03_mode::encoding)
+                            {
+                                this->coder->Encode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+                            else
+                            {
+                                unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                                count = cum_freq >= predictor[0];
+                                this->coder->Decode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+
+                            predictor[count]++;
+                        }
+
+                        count = count ? total : count;
                     }
                     else
                     {
-                        unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1] + predictor[2]);
-                    
-                        count       = (cum_freq >= predictor[0]) + (cum_freq >= (unsigned int)(predictor[0] + predictor[1]));
-                        cum_freq    = count == 0 ? 0 : count == 1 ? predictor[0] : predictor[0] + predictor[1];
+                        count = 1;
+                    }
+                }
+                else
+                {
+                    int32_t pivot = (count == 0) | (count == 3);
 
-                        this->coder->Decode(cum_freq, predictor[count], predictor[0] + predictor[1] + predictor[2]);
+                    {
+                        ptrdiff_t bucket = m03_T3_model_m0_state_table[state];
+
+                        uint16_t * RESTRICT predictor = &this->T3_model_m0[bucket][0];
+                        if (predictor[0] + predictor[1] > m03_T3_model_m0_scale_table[bucket])
+                        {
+                            predictor[0] = (predictor[0] + 1) >> 1;
+                            predictor[1] = (predictor[1] + 1) >> 1;
+                        }
+
+                        if (this->mode == m03_mode::encoding)
+                        {
+                            this->coder->Encode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
+                        }
+                        else
+                        {
+                            unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                            pivot = cum_freq >= predictor[0];
+                            this->coder->Decode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
+                        }
+
+                        predictor[pivot]++; this->Symbol_history[symbol][level] = pivot;
                     }
 
-                    predictor[count]++; this->Symbol_history[symbol][level] = count != 1;
+                    if (pivot)
+                    {
+                        count = count > 0;
+
+                        {
+                            ptrdiff_t bucket = m03_T3_model_m1_state_table[state];
+
+                            uint16_t * RESTRICT predictor = &this->T3_model_m1[bucket][0];
+                            if (predictor[0] + predictor[1] > m03_T3_model_m1_scale_table[bucket])
+                            {
+                                predictor[0] = (predictor[0] + 1) >> 1;
+                                predictor[1] = (predictor[1] + 1) >> 1;
+                            }
+
+                            if (this->mode == m03_mode::encoding)
+                            {
+                                this->coder->Encode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+                            else
+                            {
+                                unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                                count = cum_freq >= predictor[0];
+                                this->coder->Decode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+
+                            predictor[count]++;
+                        }
+
+                        count = count ? total : count;
+                    }
+                    else
+                    {
+                        count = count - 1;
+
+                        {
+                            ptrdiff_t bucket = m03_T3_model_m2_state_table[state];
+
+                            uint16_t * RESTRICT predictor = &this->T3_model_m2[bucket][0];
+                            if (predictor[0] + predictor[1] > m03_T3_model_m2_scale_table[bucket])
+                            {
+                                predictor[0] = (predictor[0] + 1) >> 1;
+                                predictor[1] = (predictor[1] + 1) >> 1;
+                            }
+
+                            if (this->mode == m03_mode::encoding)
+                            {
+                                this->coder->Encode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+                            else
+                            {
+                                unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                                count = cum_freq >= predictor[0];
+                                this->coder->Decode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                            }
+
+                            predictor[count]++;
+                        }
+
+                        count = count + 1;
+                    }
                 }
             }
             else
             {
-                int32_t pivot = (count > 0) + (count == total);
+                int32_t state = 0;
+                state += 1 * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
+                state += 4 * (inferred_right > 0);
+                state += 8 * (left_remaining == total);
+                state += 16 * (left_leaf);
+                state += 32 * (right_leaf);
+                state += 64 * (pivot_history);
+                state += 128 * (std::min((int32_t)bit_scan_reverse(total - 3), 7));
+                state += 1024 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+
+                int32_t pivot = (count == 0) | (count == total);
 
                 {
-                    int32_t state = 0;
-                    state += 1   * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
-                    state += 4   * (inferred_right > 0);
-                    state += 8   * (left_remaining == total);
-                    state += 16  * (leaf_node);
-                    state += 32  * (pivot_history);
-                    state += 64  * (std::min((int32_t)bit_scan_reverse(total - 2), 7));
-                    state += 512 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
-                       
-                    state = m03_Ternary_model_state_table[state];
+                    ptrdiff_t bucket = m03_Tx_model_m0_state_table[state];
 
-                    uint16_t * RESTRICT predictor = &this->Ternary_model[state][0];
-
-                    if (predictor[0] + predictor[1] + predictor[2] > m03_Ternary_model_scale_table[state])
+                    uint16_t * RESTRICT predictor = &this->Tx_model_m0[bucket][0];
+                    if (predictor[0] + predictor[1] > m03_Tx_model_m0_scale_table[bucket])
                     {
                         predictor[0] = (predictor[0] + 1) >> 1;
                         predictor[1] = (predictor[1] + 1) >> 1;
-                        predictor[2] = (predictor[2] + 1) >> 1;
                     }
 
                     if (this->mode == m03_mode::encoding)
                     {
-                        unsigned int cum_freq = pivot == 0 ? 0 : pivot == 1 ? predictor[0] : predictor[0] + predictor[1];
-                        this->coder->Encode(cum_freq, predictor[pivot], predictor[0] + predictor[1] + predictor[2]);
+                        this->coder->Encode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
                     }
                     else
                     {
-                        unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1] + predictor[2]);
+                        unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
 
-                        pivot = (cum_freq >= predictor[0]) + (cum_freq >= (unsigned int)(predictor[0] + predictor[1]));
-                        cum_freq = pivot == 0 ? 0 : pivot == 1 ? predictor[0] : predictor[0] + predictor[1];
-
-                        this->coder->Decode(cum_freq, predictor[pivot], predictor[0] + predictor[1] + predictor[2]);
+                        pivot = cum_freq >= predictor[0];
+                        this->coder->Decode(pivot ? predictor[0] : 0, predictor[pivot], predictor[0] + predictor[1]);
                     }
 
-                    predictor[pivot]++; this->Symbol_history[symbol][level] = pivot != 1; if (pivot != 1) { count = pivot == 0 ? 0 : total; }
+                    predictor[pivot]++; this->Symbol_history[symbol][level] = pivot;
                 }
 
-                if (pivot == 1)
+                if (pivot)
                 {
-                    int32_t state = 0;
-                    state += 1 * (inferred_right >= total);
-                    state += 2 * (pivot_history);
-                    state += 4  * (std::min(total - 3, 15));
-                    state += 64 * (((int64_t)left_remaining * 5) / ((int64_t)right_remaining));
+                    count = count > 0;
+
+                    {
+                        ptrdiff_t bucket = m03_Tx_model_m1_state_table[state];
+
+                        uint16_t * RESTRICT predictor = &this->Tx_model_m1[bucket][0];
+                        if (predictor[0] + predictor[1] > m03_Tx_model_m1_scale_table[bucket])
+                        {
+                            predictor[0] = (predictor[0] + 1) >> 1;
+                            predictor[1] = (predictor[1] + 1) >> 1;
+                        }
+
+                        if (this->mode == m03_mode::encoding)
+                        {
+                            this->coder->Encode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                        }
+                        else
+                        {
+                            unsigned int cum_freq = this->coder->GetCumFreq(predictor[0] + predictor[1]);
+
+                            count = cum_freq >= predictor[0];
+                            this->coder->Decode(count ? predictor[0] : 0, predictor[count], predictor[0] + predictor[1]);
+                        }
+
+                        predictor[count]++;
+                    }
+
+                    count = count ? total : count;
+                }
+                else
+                {
+                    state = 0;
+                    state += 1 * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
+                    state += 4 * (inferred_right >= total);
+                    state += 8 * (left_leaf);
+                    state += 16 * (pivot_history);
+                    state += 32 * (std::min(total - 4, 15));
+                    state += 512 * (((int64_t)left_remaining * 7) / ((int64_t)right_remaining));
 
                     int32_t min = 1, max = total - 1, context = 1;
                     while (min != max && context < 16)
                     {
-                        ptrdiff_t bucket = m03_Tree_model_state_table[state * 16 + context];
+                        ptrdiff_t bucket = m03_Tx_model_m2_state_table[state * 16 + context];
 
-                        uint16_t * RESTRICT predictor = &this->Tree_model[bucket][0];
-
-                        if (predictor[0] + predictor[1] > m03_Tree_model_scale_table[bucket])
+                        uint16_t * RESTRICT predictor = &this->Tx_model_m2[bucket][0];
+                        if (predictor[0] + predictor[1] > m03_Tx_model_m2_scale_table[bucket])
                         {
                             predictor[0] = (predictor[0] + 1) >> 1;
                             predictor[1] = (predictor[1] + 1) >> 1;
@@ -399,10 +562,18 @@ protected:
 private:
     RangeCoder *    coder;
 
-    uint16_t        T1_model[96][2];
-    uint16_t        T2_model[96][4];
-    uint16_t        Ternary_model[192][4];
-    uint16_t        Tree_model[256][2];
+    uint16_t        T1_model[128][2];
+
+    uint16_t        T2_model_m0[48][2];
+    uint16_t        T2_model_m1[80][2];
+
+    uint16_t        T3_model_m0[48][2];
+    uint16_t        T3_model_m1[64][2];
+    uint16_t        T3_model_m2[32][2];
+
+    uint16_t        Tx_model_m0[64][2];
+    uint16_t        Tx_model_m1[80][2];
+    uint16_t        Tx_model_m2[256][2];
 
     uint8_t         Symbol_history[MAX_ALPHABET_SIZE][SYMBOL_HISTORY_MAX_DEPTH];
 

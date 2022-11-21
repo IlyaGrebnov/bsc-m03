@@ -45,6 +45,8 @@ This file is a part of bsc-m03 project.
 
 int32_t root_frequencies[MAX_ALPHABET_SIZE + 1];
 
+#if !defined(BSC_DECOMPRESSION_ONLY)
+
 template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer, int32_t block_size)
 {
     int32_t indexes[32]     = { -1 };
@@ -71,7 +73,7 @@ template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer,
         {
             if (symbol_t * L = (symbol_t *)malloc(((size_t)block_symbols + 1) * sizeof(symbol_t)))
             {
-                if (m03_parser<symbol_t> * parser = (m03_parser<symbol_t> *)malloc(sizeof(m03_parser<symbol_t>)))
+                if (m03_parser<symbol_t, m03_mode::encoding> * parser = (m03_parser<symbol_t, m03_mode::encoding> *)malloc(sizeof(m03_parser<symbol_t, m03_mode::encoding>)))
                 {
                     {
                         int32_t primary_index = indexes[0];
@@ -91,7 +93,7 @@ template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer,
                         coder.EncodeValue(1, indexes[t], block_symbols);
                     }
 
-                    if (parser->initialize(L, block_symbols + 1, indexes[0], root_frequencies, 1 << (8 * symbol_size), &coder, m03_mode::encoding))
+                    if (parser->initialize(L, block_symbols + 1, indexes[0], root_frequencies, 1 << (8 * symbol_size), &coder))
                     {
                         parser->run();
                         parser->destroy();
@@ -130,6 +132,8 @@ template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer,
     return comressed_size;
 }
 
+#endif
+
 template <class symbol_t> static int32_t decompress_burrows_wheeler_transform(RangeCoder * coder, int32_t primary_index, int32_t block_size, uint8_t * buffer)
 {
     int32_t result          = -1;
@@ -138,9 +142,9 @@ template <class symbol_t> static int32_t decompress_burrows_wheeler_transform(Ra
 
     if (symbol_t * L = (symbol_t *)malloc(((size_t)block_symbols + 1) * sizeof(symbol_t)))
     {
-        if (m03_parser<symbol_t> * parser = (m03_parser<symbol_t> *)malloc(sizeof(m03_parser<symbol_t>)))
+        if (m03_parser<symbol_t, m03_mode::decoding> * parser = (m03_parser<symbol_t, m03_mode::decoding> *)malloc(sizeof(m03_parser<symbol_t, m03_mode::decoding>)))
         {
-            if (parser->initialize(L, block_symbols + 1, primary_index, root_frequencies, 1 << (8 * symbol_size), coder, m03_mode::decoding))
+            if (parser->initialize(L, block_symbols + 1, primary_index, root_frequencies, 1 << (8 * symbol_size), coder))
             {
                 parser->run();
                 parser->destroy();
@@ -221,6 +225,8 @@ static int32_t decompress_memory_block(uint8_t * buffer, int32_t comressed_size,
 
     return decomressed_size;
 }
+
+#if !defined(BSC_DECOMPRESSION_ONLY)
 
 static int compress_file(const char * input_file_name, const char * output_file_name, int32_t max_block_size, int32_t symbol_size)
 {
@@ -304,6 +310,8 @@ static int compress_file(const char * input_file_name, const char * output_file_
 
     return 0;
 }
+
+#endif
 
 static int decompress_file(const char * input_file_name, const char * output_file_name)
 {
@@ -400,16 +408,20 @@ static int decompress_file(const char * input_file_name, const char * output_fil
 
 static int print_usage()
 {
+#if !defined(BSC_DECOMPRESSION_ONLY)
     fprintf(stdout, "Usage: bsc-m03 <e|d> input-file output-file <options>\n");
     fprintf(stdout, "  -b<size> Block size in bytes, default 128MB (memory usage is ~13x).\n");
     fprintf(stdout, "  -w<8|16> Symbol width in bits.\n");
+#else
+    fprintf(stdout, "Usage: bsc-m03 d input-file output-file\n");
+#endif
 
     return 0;
 }
 
 int main(int argc, const char * argv[])
 {
-    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.3.0 (10 November 2022).\n");
+    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.4.0 (20 November 2022).\n");
     fprintf(stdout, "Copyright (c) 2021-2022 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
     fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco (see AUTHORS).\n\n");
 
@@ -455,6 +467,7 @@ int main(int argc, const char * argv[])
 
     switch (argv[1][0])
     {
+#if !defined(BSC_DECOMPRESSION_ONLY)
         case 'c':
         case 'C':
         case 'e':
@@ -462,6 +475,7 @@ int main(int argc, const char * argv[])
         {
             return compress_file(argv[2], argv[3], max_block_size, symbol_width / 8);
         }
+#endif
 
         case 'd':
         case 'D':

@@ -36,7 +36,8 @@ This file is a part of bsc-m03 project.
 #include "m03_model.h"
 
 #define OPTIMAL_ABT_SMALL_THRESHOLD   (7)
-#define OPTIMAL_ABT_LARGE_THRESHOLD   (257)
+#define OPTIMAL_ABT_LARGE_THRESHOLD   (256)
+#define MAX_SYMBOL_PIVOTS             (64)
 
 #pragma warning( push )
 #pragma warning( disable : 6385 )
@@ -83,12 +84,12 @@ typedef struct offset_queue
 
 } offset_queue;
 
-template <class symbol_t>
-class m03_parser: m03_model
+template <class symbol_t, m03_mode mode>
+class m03_parser: m03_model<mode>
 {
 public:
 
-    bool initialize(symbol_t * L, int32_t n, int32_t primary_index, int32_t * root_frequencies, int32_t k, RangeCoder * coder, m03_mode mode)
+    bool initialize(symbol_t * L, int32_t n, int32_t primary_index, int32_t * root_frequencies, int32_t k, RangeCoder * coder)
     {
         memset(this, 0, sizeof(m03_parser));
 
@@ -122,7 +123,9 @@ public:
             return false;
         }
 
-        this->initialize_model(coder, mode);
+        memset(this->contexts, 0, n * sizeof(symbol_context));
+
+        this->initialize_model(coder);
         this->initialize_alphabetic_tree_roots();
 
         return true;
@@ -130,7 +133,7 @@ public:
 
     void run()
     {
-        if (this->mode == m03_mode::encoding)
+        if (mode == m03_mode::encoding)
         {
             this->encode_root_frequencies(this->root_frequencies, this->k, this->n - 1);
             this->initialize_root_context(this->root_frequencies);
@@ -188,9 +191,10 @@ private:
     offset_queue        next_segments;
     void *              hutucker_tmp;
 
-    int32_t             parent_frequencies  [MAX_ALPHABET_SIZE + 1];
-    int32_t             left_frequencies    [MAX_ALPHABET_SIZE + 1];
-    symbol_context      left_contexts       [MAX_ALPHABET_SIZE + 1];
+    int32_t             parent_frequencies  [MAX_ALPHABET_SIZE];
+    int32_t             left_frequencies    [MAX_ALPHABET_SIZE];
+    symbol_context      left_contexts       [MAX_ALPHABET_SIZE];
+    uint8_t             symbol_pivots       [MAX_ALPHABET_SIZE][MAX_SYMBOL_PIVOTS];
 
     int32_t             alphabetic_tree_keys[OPTIMAL_ABT_LARGE_THRESHOLD];
     int32_t             alphabetic_tree_weight[OPTIMAL_ABT_LARGE_THRESHOLD];
@@ -253,7 +257,7 @@ private:
                 else
                 {
                     m03_parser::populate_context_frequencies(&this->contexts[context_start], &this->contexts[this->primary_index], &this->parent_frequencies[0]);
-                    this->split_context_recursive(&this->current_segments.offsets[segment_start], &this->current_segments.offsets[segment_end], 0);
+                    this->split_context_recursive(&this->current_segments.offsets[segment_start], &this->current_segments.offsets[segment_end], 2);
                 }
 
                 segment_start = segment_end;
@@ -460,6 +464,8 @@ private:
 
     void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level, int32_t left_leaf, int32_t right_leaf)
     {
+        level = std::min(level, MAX_SYMBOL_PIVOTS - 1);
+
         symbol_context * parent_context = &this->contexts[parent_context_offset];
         int32_t parent_interval_size    = parent_context[0].count;
         int32_t parent_unique_symbols   = 1;
@@ -472,7 +478,7 @@ private:
         int32_t right_interval_size     = parent_interval_size - left_interval_size;
         int32_t right_unique_symbols    = 0;
 
-        if (this->mode == m03_mode::encoding)
+        if (mode == m03_mode::encoding)
         {
             if (left_interval_size <= right_interval_size)
             {
@@ -539,27 +545,52 @@ private:
         for (int32_t parent_symbol_index = 0; parent_symbol_index < parent_unique_symbols; ++parent_symbol_index)
         {
             symbol_t symbol = parent_context[parent_symbol_index].symbol;
+            int32_t  offset = parent_context[parent_symbol_index].offset;
             int32_t  total  = parent_context[parent_symbol_index].count;
-            int32_t  count  = left_frequencies[symbol];
-                
-            if (total <= left_remaining + right_remaining - total)
+            int32_t  count  = mode == m03_mode::encoding ? left_frequencies[symbol] : 0;
+
+            if ((left_remaining > 0) && (right_remaining > 0) && (left_remaining + right_remaining > total))
             {
-                count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf, right_leaf)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf, left_leaf);
+                int32_t context = this->symbol_pivots[symbol][level - 2] | this->symbol_pivots[symbol][level - 1];
+                int32_t  simple = (total > 1) && (this->contexts[offset].count == total) && (this->contexts[offset + 1].count == 0);
+
+                if (parent_symbol_index == parent_unique_symbols - 2)
+                {
+                    symbol_t symbol1 = parent_context[parent_symbol_index + 1].symbol;
+                    int32_t  offset1 = parent_context[parent_symbol_index + 1].offset;
+                    int32_t  total1  = parent_context[parent_symbol_index + 1].count;
+
+                    context |= this->symbol_pivots[symbol1][level - 2] | this->symbol_pivots[symbol1][level - 1];
+                    simple  |= (total1 > 1) && (this->contexts[offset1].count == total1) && (this->contexts[offset1 + 1].count == 0);
+                }
+
+                context += 8 * simple;
+
+                if (total <= left_remaining + right_remaining - total)
+                {
+                    count = left_remaining <= right_remaining
+                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, context + 2 * left_leaf + 4 * right_leaf)
+                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, context + 2 * right_leaf + 4 * left_leaf);
+                }
+                else
+                {
+                    total = left_remaining + right_remaining - total;
+                    count = left_remaining - count;
+
+                    count = left_remaining <= right_remaining
+                        ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, context + 2 * right_leaf + 4 * left_leaf)
+                        : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, context + 2 * left_leaf + 4 * right_leaf);
+
+                    count = left_remaining - count;
+                    total = left_remaining + right_remaining - total;
+                }
             }
             else
             {
-                total = left_remaining + right_remaining - total;
-                count = left_remaining - count;
-
-                count = left_remaining <= right_remaining
-                    ?         this->predict(        count, total, left_remaining , right_remaining, parent_unique_symbols - parent_symbol_index, symbol, level, right_leaf, left_leaf)
-                    : total - this->predict(total - count, total, right_remaining, left_remaining , parent_unique_symbols - parent_symbol_index, symbol, level, left_leaf, right_leaf);
-
-                count = left_remaining - count;
-                total = left_remaining + right_remaining - total;
+                count = std::min(left_remaining, total);
             }
+
+            this->symbol_pivots[symbol][level] = (count == 0) | (count == total);
 
             left_remaining  = left_remaining  - count;
             right_remaining = right_remaining + count - total;

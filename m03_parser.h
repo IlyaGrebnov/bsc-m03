@@ -542,7 +542,7 @@ private:
         left_remaining  -= ((uint32_t)(this->primary_index - parent_context_offset) < (uint32_t)left_interval_size );
         right_remaining -= ((uint32_t)(this->primary_index - right_context_offset ) < (uint32_t)right_interval_size);
 
-        for (int32_t parent_symbol_index = 0; parent_symbol_index < parent_unique_symbols; ++parent_symbol_index)
+        for (int32_t pivot_history = 0, parent_symbol_index = 0; parent_symbol_index < parent_unique_symbols; ++parent_symbol_index)
         {
             symbol_t symbol = parent_context[parent_symbol_index].symbol;
             int32_t  offset = parent_context[parent_symbol_index].offset;
@@ -564,7 +564,10 @@ private:
                     simple  |= (total1 > 1) && (this->contexts[offset1].count == total1) && (this->contexts[offset1 + 1].count == 0);
                 }
 
-                context += 8 * simple;
+                context += 8 * simple + 16 * pivot_history;
+
+                left_leaf  &= (left_remaining  == left_interval_size );
+                right_leaf &= (right_remaining == right_interval_size);
 
                 if (total <= left_remaining + right_remaining - total)
                 {
@@ -590,7 +593,7 @@ private:
                 count = std::min(left_remaining, total);
             }
 
-            this->symbol_pivots[symbol][level] = (count == 0) | (count == total);
+            pivot_history |= (this->symbol_pivots[symbol][level] = (count == 0) | (count == total));
 
             left_remaining  = left_remaining  - count;
             right_remaining = right_remaining + count - total;

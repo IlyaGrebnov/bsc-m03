@@ -232,18 +232,18 @@ protected:
         {
             int32_t state = 0;
             state += 1 * (context);
-            state += 16 * (std::min((int32_t)symbols_remaining - 2, 7));
-            state += 128 * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
-            state += 512 * (left_remaining + right_remaining + inferred_right == symbols_remaining);
-            state += 1024 * (left_remaining == total);
-            state += 2048 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+            state += 32 * (std::min((int32_t)symbols_remaining - 2, 7));
+            state += 256 * (std::min((int32_t)bit_scan_reverse(inferred_right + 1), 3));
+            state += 1024 * (left_remaining + right_remaining + inferred_right == symbols_remaining);
+            state += 2048 * (left_remaining == total);
+            state += 4096 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
 
             if (total == 1)
             {
-                ptrdiff_t bucket = m03_T1_model_state_table[state];
+                ptrdiff_t bucket = m03_T1_model_m0_state_table[state];
 
                 uint16_t * RESTRICT predictor = &this->T1_model[bucket][0];
-                if (predictor[0] + predictor[1] > m03_T1_model_scale_table[bucket])
+                if (predictor[0] + predictor[1] > m03_T1_model_m0_scale_table[bucket])
                 {
                     predictor[0] = (predictor[0] + 1) >> 1;
                     predictor[1] = (predictor[1] + 1) >> 1;
@@ -414,10 +414,10 @@ protected:
             int32_t state = 0;
             state += 1 * (std::min((int32_t)bit_scan_reverse(total - 3), 7));
             state += 8 * (context);
-            state += 128 * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
-            state += 512 * (left_remaining == total);
-            state += 1024 * (inferred_right > 0);
-            state += 2048 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
+            state += 256 * (std::min((int32_t)bit_scan_reverse(symbols_remaining - 1), 3));
+            state += 1024 * (left_remaining == total);
+            state += 2048 * (inferred_right > 0);
+            state += 4096 * (((int64_t)left_remaining * 11) / ((int64_t)right_remaining));
 
             int32_t pivot = (count == 0) | (count == total);
 

@@ -43,13 +43,13 @@ size_t hutucker_tmp_size(size_t n);
  * Precondition: 
  * n: number of symbols
  * weight[i] (0 <= i < n): the weight of symbol i
- * weight[0] + ... + weight[n - 1] must not exceed ULONG_MAX
+ * weight[0] + ... + weight[n - 1] must not exceed UINT_MAX
  * tmp: buffer with size >= hutucker_tmp_size(n)
  *
  * Postcondition:
  * weight[i] (0 <= i < n): the length of hu-tucker code of symbol i
  */
-void hutucker_get_lengths(size_t n, unsigned long *weight, void *tmp);
+void hutucker_get_lengths(size_t n, unsigned int *weight, void *tmp);
 
 #ifdef __cplusplus
 }

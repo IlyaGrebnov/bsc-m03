@@ -37,7 +37,7 @@ typedef struct {
     size_t i, j;
 } segnode;
 
-static void segupdate(segnode *pa, segnode *lc, segnode *rc, unsigned long *w) {
+static void segupdate(segnode *pa, segnode *lc, segnode *rc, unsigned int *w) {
     if (!lc->n) {
         *pa = *rc;
         return;
@@ -87,7 +87,7 @@ size_t hutucker_tmp_size(size_t n) {
            sizeof(size_t) * (n + (2 * n - 1) + (2 * n - 1));
 }
 
-void hutucker_get_lengths(size_t n, unsigned long *weight, void *tmp) {
+void hutucker_get_lengths(size_t n, unsigned int *weight, void *tmp) {
     size_t m = raise_power_of_two(n);
     segnode *seg = (segnode *) tmp;
     size_t *cur = (size_t *) (seg + 2 * m - 1);
@@ -124,5 +124,5 @@ void hutucker_get_lengths(size_t n, unsigned long *weight, void *tmp) {
     for (size_t i = 2 * n - 3; i != (size_t) -1; i--)
         level[i] = level[pa[i]] + 1;
     for (size_t i = 0; i < n; i++)
-        weight[i] = (unsigned long)level[i];
+        weight[i] = (unsigned int)level[i];
 }

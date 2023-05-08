@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2023 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -409,7 +409,7 @@ private:
                     this->left_frequencies[offsets_index] = 1 + segment_end - segment_start; segment_end = segment_start;
                 }
 
-                hutucker_get_lengths(offsets_count, (unsigned long *)this->left_frequencies, this->hutucker_tmp);
+                hutucker_get_lengths(offsets_count, (unsigned int *)this->left_frequencies, this->hutucker_tmp);
             }
 
             {

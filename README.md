@@ -8,12 +8,14 @@ Moreover, the bsc-m03 compressor is a practical implementation of *Compression v
 * Danny Dube, Vincent Beaudoin *Lossless Data Compression via Substring Enumeration*, 2010
 * Takahiro Ota, Hiroyoshi Morita, Akiko Manada *Compression by Substring Enumeration with a Finite Alphabet Using Sorting*, 2018
 
-Copyright (c) 2021-2022 Ilya Grebnov <ilya.grebnov@gmail.com>
+Copyright (c) 2021-2023 Ilya Grebnov <ilya.grebnov@gmail.com>
 
 ## License
 The bsc-m03 is released under the [GNU General Public License](LICENSE "GNU General Public License")
 
 ## Changes
+* 2023-05-08 : Version 0.5.5
+  * Fixed segmentation fault on Unix based systems.
 * 2022-11-27 : Version 0.5.0
   * Compression ratio improvements.
 * 2022-11-20 : Version 0.4.0

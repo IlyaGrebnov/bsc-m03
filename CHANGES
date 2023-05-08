@@ -1,3 +1,6 @@
+* 2023-05-08 : Version 0.5.5
+  * Fixed segmentation fault on Unix based systems.
+
 * 2022-11-27 : Version 0.5.0
   * Compression ratio improvements.
 

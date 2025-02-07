@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021-2023 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -168,11 +168,10 @@ template <class symbol_t> static int32_t compress_memory_block(uint8_t * buffer,
 
 #endif
 
-template <class symbol_t> static int32_t decompress_burrows_wheeler_transform(RangeCoder * coder, int32_t primary_index, int32_t block_size, uint8_t * buffer)
+template <class symbol_t> static int32_t decompress_burrows_wheeler_transform(RangeCoder * coder, int32_t primary_index, int32_t block_symbols, uint8_t * buffer)
 {
     int32_t result          = -1;
     int32_t symbol_size     = (int32_t)sizeof(symbol_t);
-    int32_t block_symbols   = block_size / symbol_size;
 
     if (symbol_t * L = (symbol_t *)malloc(((size_t)block_symbols + 1) * sizeof(symbol_t)))
     {
@@ -229,8 +228,8 @@ static int32_t decompress_memory_block(uint8_t * buffer, int32_t compressed_size
     }
 
     int32_t result = symbol_size == 1
-        ? decompress_burrows_wheeler_transform<uint8_t> (&coder, indexes[0], block_size, buffer)
-        : decompress_burrows_wheeler_transform<uint16_t>(&coder, indexes[0], block_size, buffer);
+        ? decompress_burrows_wheeler_transform<uint8_t> (&coder, indexes[0], block_symbols, buffer)
+        : decompress_burrows_wheeler_transform<uint16_t>(&coder, indexes[0], block_symbols, buffer);
 
     if (result == 0)
     {
@@ -293,7 +292,11 @@ static int compress_file(const char * input_file_name, const char * output_file_
                         ? compress_memory_block<uint8_t> (buffer, block_size) 
                         : compress_memory_block<uint16_t>(buffer, block_size);
 
-                    if (compressed_size <= 0) { break; }
+                    if (compressed_size <= 0 || compressed_size > block_size)
+                    {
+                        fprintf(stderr, "\nError: compression failed, please contact the author!\n");
+                        break;
+                    }
 
                     if (fwrite(&block_size, sizeof(uint8_t), sizeof(block_size), output_file) != sizeof(block_size))
                     {
@@ -398,7 +401,11 @@ static int decompress_file(const char * input_file_name, const char * output_fil
                             ? decompress_memory_block(buffer, compressed_size, block_size)
                             : block_size;
 
-                        if (decompressed_size != block_size) { break; }
+                        if (decompressed_size != block_size)
+                        {
+                            fprintf(stderr, "\nError: The compressed data is corrupted!\n");
+                            break;
+                        }
 
                         if (fwrite(buffer, sizeof(uint8_t), decompressed_size, output_file) != decompressed_size)
                         {
@@ -460,8 +467,8 @@ static int print_usage()
 
 int main(int argc, const char * argv[])
 {
-    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.5.5 (8 May 2023).\n");
-    fprintf(stdout, "Copyright (c) 2021-2023 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
+    fprintf(stdout, "bsc-m03 is experimental block sorting compressor. Version 0.5.5 (8 May 2024).\n");
+    fprintf(stdout, "Copyright (c) 2021-2024 Ilya Grebnov <Ilya.Grebnov@gmail.com>. ABSOLUTELY NO WARRANTY.\n");
     fprintf(stdout, "This program is based on (at least) the work of Michael Maniscalco (see AUTHORS).\n\n");
 
     int32_t max_block_size  = 128 * 1024 * 1024;

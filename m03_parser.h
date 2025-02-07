@@ -2,7 +2,7 @@
 
 This file is a part of bsc-m03 project.
 
-    Copyright (c) 2021-2023 Ilya Grebnov <ilya.grebnov@gmail.com>
+    Copyright (c) 2021-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
     bsc-m03 is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -205,7 +205,7 @@ private:
     {
         for (int32_t l = 0; l < OPTIMAL_ABT_LARGE_THRESHOLD - 1; ++l)
         {
-            this->alphabetic_tree_root[l][l + 1] = this->alphabetic_tree_root[l][l] = l;
+            this->alphabetic_tree_root[l][l] = this->alphabetic_tree_root[l][l + 1] = l;
         }
     }
 
@@ -289,7 +289,7 @@ private:
         if (offsets_end - offsets >= OPTIMAL_ABT_SMALL_THRESHOLD && offsets_end - offsets <= OPTIMAL_ABT_LARGE_THRESHOLD)
         {
             this->build_optimal_alphabetic_tree(offsets, offsets_end);
-            this->traverse_alphabetic_tree(offsets, offsets_end, 0, (int32_t)(offsets_end - offsets) - 1, level);
+            this->traverse_alphabetic_tree(offsets, 0, (int32_t)(offsets_end - offsets), level);
             return;
         }
 
@@ -297,32 +297,26 @@ private:
             ? this->choose_context_pivot_using_heuristic(offsets, offsets_end)
             : &offsets[1];
 
-        this->split_context_by_pivot(offsets[0], offsets_pivot[0], level, (offsets_pivot - offsets) == 1, (offsets_end - offsets_pivot) == 1);
+        this->split_context_by_pivot(offsets[0], offsets_pivot[0], level, (int32_t)(offsets_pivot - offsets), (int32_t)(offsets_end - offsets_pivot));
         this->split_context_recursive(offsets, offsets_pivot, level + 1);
         this->split_context_recursive(offsets_pivot, offsets_end, level + 1);
     }
 
-    void traverse_alphabetic_tree(const int32_t * offsets, const int32_t * offsets_end, int32_t l, int32_t r, int32_t level)
+    void traverse_alphabetic_tree(const int32_t * offsets, int32_t l, int32_t r, int32_t level)
     {
-        assert(l <= r);
+        assert(l < r);
 
-        if (r + 1 - l < OPTIMAL_ABT_SMALL_THRESHOLD)
+        if ((r - l < OPTIMAL_ABT_SMALL_THRESHOLD) || this->is_trivial_context(offsets[l]))
         {
-            split_context_recursive(&offsets[l], &offsets[r + 1], level);
+            this->split_context_recursive(&offsets[l], &offsets[r], level);
             return;
         }
 
-        if (this->is_trivial_context(offsets[l]))
-        {
-            m03_parser::split_trivial_context(this->contexts, this->next_segments, &offsets[l], &offsets[r + 1]);
-            return;
-        }
+        int32_t offsets_pivot = this->alphabetic_tree_root[l][r - 1] + 1;
 
-        int32_t offsets_pivot = this->alphabetic_tree_root[l][r];
-
-        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot + 1], level, (offsets_pivot - l) == 0, (r - offsets_pivot) == 1);
-        this->traverse_alphabetic_tree(offsets, offsets_end, l, offsets_pivot, level + 1);
-        this->traverse_alphabetic_tree(offsets, offsets_end, offsets_pivot + 1, r, level + 1);
+        this->split_context_by_pivot(offsets[l], offsets[offsets_pivot], level, offsets_pivot - l, r - offsets_pivot);
+        this->traverse_alphabetic_tree(offsets, l, offsets_pivot, level + 1);
+        this->traverse_alphabetic_tree(offsets, offsets_pivot, r, level + 1);
     }
 
     const int32_t * choose_context_pivot_using_heuristic(const int32_t * offsets, const int32_t * offsets_end)
@@ -462,7 +456,7 @@ private:
         }
     }
 
-    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level, int32_t left_leaf, int32_t right_leaf)
+    void split_context_by_pivot(int32_t parent_context_offset, int32_t right_context_offset, int32_t level, int32_t left_subintervals, int32_t right_subintervals)
     {
         level = std::min(level, MAX_SYMBOL_PIVOTS - 1);
 
@@ -536,6 +530,9 @@ private:
             assert(parent_total_symbols > 0); parent_context[0].count = parent_total_symbols;
         }
 
+        int32_t  left_leaf          = left_subintervals  == 1;
+        int32_t  right_leaf         = right_subintervals == 1;
+
         int32_t  left_remaining     = left_interval_size;
         int32_t  right_remaining    = right_interval_size;
 
@@ -549,7 +546,7 @@ private:
             int32_t  total  = parent_context[parent_symbol_index].count;
             int32_t  count  = mode == m03_mode::encoding ? left_frequencies[symbol] : 0;
 
-            if ((left_remaining > 0) && (right_remaining > 0) && (left_remaining + right_remaining > total))
+            if ((left_remaining > 0) && (right_remaining > 0) && (left_remaining + right_remaining != total))
             {
                 int32_t context = this->symbol_pivots[symbol][level - 2] | this->symbol_pivots[symbol][level - 1];
                 int32_t  simple = (total > 1) && (this->contexts[offset].count == total) && (this->contexts[offset + 1].count == 0);

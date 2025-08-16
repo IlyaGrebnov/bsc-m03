@@ -53,7 +53,7 @@ typedef size_t                          fast_uint_t;
 #define BUCKETS_INDEX2(_c, _s)          (((_c) << 1) + (_s))
 #define BUCKETS_INDEX4(_c, _s)          (((_c) << 2) + (_s))
 
-#define LIBSAIS_LOCAL_BUFFER_SIZE       (1024)
+#define LIBSAIS_LOCAL_BUFFER_SIZE       (2000)
 #define LIBSAIS_PER_THREAD_CACHE_SIZE   (24576)
 
 #define LIBSAIS_FLAGS_NONE              (0)
@@ -466,21 +466,21 @@ static void libsais_gather_lms_suffixes_8u(const uint8_t * RESTRICT T, sa_sint_t
 
         while (j < n && (c1 = T[j]) == c0) { ++j; }
 
-        fast_uint_t s = c0 >= c1;
+        fast_uint_t f0 = c0 >= c1, f1 = 0;
 
         for (i = omp_block_start + omp_block_size - 2, j = omp_block_start + 3; i >= j; i -= 4)
         {
             libsais_prefetchr(&T[i - prefetch_distance]);
 
-            c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 0); m -= ((s & 3) == 1);
-            c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 1); m -= ((s & 3) == 1);
-            c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 2); m -= ((s & 3) == 1);
+            c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+            c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 0); m -= (f0 & ~f1);
+            c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i - 1); m -= (f1 & ~f0);
+            c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 2); m -= (f0 & ~f1);
         }
 
         for (j -= 3; i >= j; i -= 1)
         {
-            c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
+            c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i + 1); m -= (f0 & ~f1);
         }
 
         SA[m] = (sa_sint_t)(i + 1);
@@ -534,7 +534,8 @@ static sa_sint_t libsais_gather_lms_suffixes_32s(const sa_sint_t * RESTRICT T, s
 
     sa_sint_t             i   = n - 2;
     sa_sint_t             m   = n - 1;
-    fast_uint_t           s   = 1;
+    fast_uint_t           f0  = 1;
+    fast_uint_t           f1  = 0;
     fast_sint_t           c0  = T[n - 1];
     fast_sint_t           c1  = 0;
 
@@ -542,15 +543,15 @@ static sa_sint_t libsais_gather_lms_suffixes_32s(const sa_sint_t * RESTRICT T, s
     {
         libsais_prefetchr(&T[i - prefetch_distance]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = i + 1; m -= ((s & 3) == 1);
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i - 0; m -= ((s & 3) == 1);
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = i - 1; m -= ((s & 3) == 1);
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i - 2; m -= ((s & 3) == 1);
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = i + 1; m -= (sa_sint_t)(f1 & ~f0);
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i - 0; m -= (sa_sint_t)(f0 & ~f1);
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = i - 1; m -= (sa_sint_t)(f1 & ~f0);
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i - 2; m -= (sa_sint_t)(f0 & ~f1);
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i + 1; m -= ((s & 3) == 1);
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i + 1; m -= (sa_sint_t)(f0 & ~f1);
     }
 
     return n - 1 - m;
@@ -562,7 +563,8 @@ static sa_sint_t libsais_gather_compacted_lms_suffixes_32s(const sa_sint_t * RES
 
     sa_sint_t             i   = n - 2;
     sa_sint_t             m   = n - 1;
-    fast_uint_t           s   = 1;
+    fast_uint_t           f0  = 1;
+    fast_uint_t           f1  = 0;
     fast_sint_t           c0  = T[n - 1];
     fast_sint_t           c1  = 0;
 
@@ -570,15 +572,15 @@ static sa_sint_t libsais_gather_compacted_lms_suffixes_32s(const sa_sint_t * RES
     {
         libsais_prefetchr(&T[i - prefetch_distance]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = i + 1; m -= ((fast_sint_t)(s & 3) == (c0 >= 0));
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i - 0; m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = i - 1; m -= ((fast_sint_t)(s & 3) == (c0 >= 0));
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i - 2; m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = i + 1; m -= (sa_sint_t)(f1 & ~f0 & (c0 >= 0));
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i - 0; m -= (sa_sint_t)(f0 & ~f1 & (c1 >= 0));
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = i - 1; m -= (sa_sint_t)(f1 & ~f0 & (c0 >= 0));
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i - 2; m -= (sa_sint_t)(f0 & ~f1 & (c1 >= 0));
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = i + 1; m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = i + 1; m -= (sa_sint_t)(f0 & ~f1 & (c1 >= 0));
     }
 
     return n - 1 - m;
@@ -593,7 +595,8 @@ static void libsais_count_lms_suffixes_32s_4k(const sa_sint_t * RESTRICT T, sa_s
     memset(buckets, 0, 4 * (size_t)k * sizeof(sa_sint_t));
 
     sa_sint_t             i   = n - 2;
-    fast_uint_t           s   = 1;
+    fast_uint_t           f0  = 1;
+    fast_uint_t           f1  = 0;
     fast_sint_t           c0  = T[n - 1];
     fast_sint_t           c1  = 0;
 
@@ -606,26 +609,26 @@ static void libsais_count_lms_suffixes_32s_4k(const sa_sint_t * RESTRICT T, sa_s
         libsais_prefetchw(&buckets[BUCKETS_INDEX4(T[i - prefetch_distance - 2], 0)]);
         libsais_prefetchw(&buckets[BUCKETS_INDEX4(T[i - prefetch_distance - 3], 0)]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
 
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
     }
 
-    buckets[BUCKETS_INDEX4((fast_uint_t)c0, (s << 1) & 3)]++;
+    buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0)]++;
 }
 
 #endif
@@ -637,7 +640,8 @@ static void libsais_count_lms_suffixes_32s_2k(const sa_sint_t * RESTRICT T, sa_s
     memset(buckets, 0, 2 * (size_t)k * sizeof(sa_sint_t));
 
     sa_sint_t             i   = n - 2;
-    fast_uint_t           s   = 1;
+    fast_uint_t           f0  = 1;
+    fast_uint_t           f1  = 0;
     fast_sint_t           c0  = T[n - 1];
     fast_sint_t           c1  = 0;
 
@@ -650,23 +654,23 @@ static void libsais_count_lms_suffixes_32s_2k(const sa_sint_t * RESTRICT T, sa_s
         libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 2], 0)]);
         libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 3], 0)]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
 
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
     }
 
     buckets[BUCKETS_INDEX2((fast_uint_t)c0, 0)]++;
@@ -681,7 +685,8 @@ static void libsais_count_compacted_lms_suffixes_32s_2k(const sa_sint_t * RESTRI
     memset(buckets, 0, 2 * (size_t)k * sizeof(sa_sint_t));
 
     sa_sint_t             i   = n - 2;
-    fast_uint_t           s   = 1;
+    fast_uint_t           f0  = 1;
+    fast_uint_t           f1  = 0;
     fast_sint_t           c0  = T[n - 1];
     fast_sint_t           c1  = 0;
 
@@ -694,23 +699,23 @@ static void libsais_count_compacted_lms_suffixes_32s_2k(const sa_sint_t * RESTRI
         libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 2] & SAINT_MAX, 0)]);
         libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 3] & SAINT_MAX, 0)]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
 
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1)));
-        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0)));
+        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
     }
 
     c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, 0)]++;
@@ -732,33 +737,33 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_8u(const uint8_t * RESTRI
 
         while (j < n && (c1 = T[j]) == c0) { ++j; }
 
-        fast_uint_t s = c0 >= c1;
+        fast_uint_t f0 = c0 >= c1, f1 = 0;
 
         for (i = m - 1, j = omp_block_start + 3; i >= j; i -= 4)
         {
             libsais_prefetchr(&T[i - prefetch_distance]);
 
-            c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+            c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-            c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 0); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 0); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
 
-            c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+            c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i - 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-            c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 2); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 2); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
         }
 
         for (j -= 3; i >= j; i -= 1)
         {
-            c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i + 1); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
         }
 
-        c1 = (i >= 0) ? T[i] : -1; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+        c1 = (i >= 0) ? T[i] : -1; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
     }
 
     return (sa_sint_t)(omp_block_start + omp_block_size - 1 - m);
@@ -845,7 +850,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k(const sa_sint_t * 
 
         while (j < n && (c1 = T[j]) == c0) { ++j; }
 
-        fast_uint_t s = c0 >= c1;
+        fast_uint_t f0 = c0 >= c1, f1 = 0;
 
         for (i = m - 1, j = omp_block_start + prefetch_distance + 3; i >= j; i -= 4)
         {
@@ -856,27 +861,27 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k(const sa_sint_t * 
             libsais_prefetchw(&buckets[BUCKETS_INDEX4(T[i - prefetch_distance - 2], 0)]);
             libsais_prefetchw(&buckets[BUCKETS_INDEX4(T[i - prefetch_distance - 3], 0)]);
 
-            c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+            c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-            c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 0); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 0); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
 
-            c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+            c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i - 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
 
-            c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 2); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 2); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
         }
 
         for (j -= prefetch_distance + 3; i >= j; i -= 1)
         {
-            c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]++;
+            c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i + 1); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]++;
         }
 
-        c1 = (i >= 0) ? T[i] : -1; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, s & 3)]++;
+        c1 = (i >= 0) ? T[i] : -1; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0 + f1)]++;
     }
 
     return (sa_sint_t)(omp_block_start + omp_block_size - 1 - m);
@@ -896,7 +901,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k(const sa_sint_t * 
 
         while (j < n && (c1 = T[j]) == c0) { ++j; }
 
-        fast_uint_t s = c0 >= c1;
+        fast_uint_t f0 = c0 >= c1, f1 = 0;
 
         for (i = m - 1, j = omp_block_start + prefetch_distance + 3; i >= j; i -= 4)
         {
@@ -907,27 +912,27 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k(const sa_sint_t * 
             libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 2], 0)]);
             libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 3], 0)]);
 
-            c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+            c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-            c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 0); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 0); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
 
-            c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+            c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i - 1); m -= (f1 & ~f0);
+            buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-            c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 2); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 2); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
         }
 
         for (j -= prefetch_distance + 3; i >= j; i -= 1)
         {
-            c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i + 1); m -= (f0 & ~f1);
+            buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
         }
 
-        c1 = (i >= 0) ? T[i] : -1; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((s & 3) == 1);
-        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = (i >= 0) ? T[i] : -1; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0);
+        buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
     }
 
     return (sa_sint_t)(omp_block_start + omp_block_size - 1 - m);
@@ -947,7 +952,7 @@ static sa_sint_t libsais_count_and_gather_compacted_lms_suffixes_32s_2k(const sa
 
         while (j < n && (c1 = T[j]) == c0) { ++j; }
 
-        fast_uint_t s = c0 >= c1;
+        fast_uint_t f0 = c0 >= c1, f1 = 0;
 
         for (i = m - 1, j = omp_block_start + prefetch_distance + 3; i >= j; i -= 4)
         {
@@ -958,27 +963,27 @@ static sa_sint_t libsais_count_and_gather_compacted_lms_suffixes_32s_2k(const sa
             libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 2] & SAINT_MAX, 0)]);
             libsais_prefetchw(&buckets[BUCKETS_INDEX2(T[i - prefetch_distance - 3] & SAINT_MAX, 0)]);
 
-            c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((fast_sint_t)(s & 3) == (c0 >= 0));
-            c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+            c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0 & (c0 >= 0));
+            c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-            c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 0); m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
-            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 0); m -= (f0 & ~f1 & (c1 >= 0));
+            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
 
-            c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 1); m -= ((fast_sint_t)(s & 3) == (c0 >= 0));
-            c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+            c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i - 1); m -= (f1 & ~f0 & (c0 >= 0));
+            c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
 
-            c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i - 2); m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
-            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i - 2); m -= (f0 & ~f1 & (c1 >= 0));
+            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
         }
 
         for (j -= prefetch_distance + 3; i >= j; i -= 1)
         {
-            c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((fast_sint_t)(s & 3) == (c1 >= 0));
-            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (s & 3) == 1)]++;
+            c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); SA[m] = (sa_sint_t)(i + 1); m -= (f0 & ~f1 & (c1 >= 0));
+            c1 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c1, (f0 & ~f1))]++;
         }
 
-        c1 = (i >= 0) ? T[i] : -1; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); SA[m] = (sa_sint_t)(i + 1); m -= ((fast_sint_t)(s & 3) == (c0 >= 0));
-        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (s & 3) == 1)]++;
+        c1 = (i >= 0) ? T[i] : -1; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); SA[m] = (sa_sint_t)(i + 1); m -= (f1 & ~f0 & (c0 >= 0));
+        c0 &= SAINT_MAX; buckets[BUCKETS_INDEX2((fast_uint_t)c0, (f1 & ~f0))]++;
     }
 
     return (sa_sint_t)(omp_block_start + omp_block_size - 1 - m);
@@ -994,7 +999,7 @@ static fast_sint_t libsais_get_bucket_stride(fast_sint_t free_space, fast_sint_t
     return bucket_size;
 }
 
-static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
     sa_sint_t m = 0;
 
@@ -1006,7 +1011,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(const sa_si
         fast_sint_t omp_thread_num    = omp_get_thread_num();
         fast_sint_t omp_num_threads   = omp_get_num_threads();
 #else
-        UNUSED(threads); UNUSED(thread_state);
+        UNUSED(local_buckets); UNUSED(threads); UNUSED(thread_state);
 
         fast_sint_t omp_thread_num    = 0;
         fast_sint_t omp_num_threads   = 1;
@@ -1023,7 +1028,8 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(const sa_si
         else
         {
             fast_sint_t bucket_size       = 4 * (fast_sint_t)k;
-            fast_sint_t bucket_stride     = libsais_get_bucket_stride(buckets - &SA[n], bucket_size, omp_num_threads);
+            fast_sint_t free_space        = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[n]);
+            fast_sint_t bucket_stride     = libsais_get_bucket_stride(free_space, bucket_size, omp_num_threads);
 
             {
                 thread_state[omp_thread_num].state.position = omp_block_start + omp_block_size;
@@ -1061,7 +1067,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(const sa_si
     return m;
 }
 
-static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
     sa_sint_t m = 0;
 
@@ -1073,7 +1079,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(const sa_si
         fast_sint_t omp_thread_num    = omp_get_thread_num();
         fast_sint_t omp_num_threads   = omp_get_num_threads();
 #else
-        UNUSED(threads); UNUSED(thread_state);
+        UNUSED(local_buckets); UNUSED(threads); UNUSED(thread_state);
 
         fast_sint_t omp_thread_num    = 0;
         fast_sint_t omp_num_threads   = 1;
@@ -1090,7 +1096,8 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(const sa_si
         else
         {
             fast_sint_t bucket_size       = 2 * (fast_sint_t)k;
-            fast_sint_t bucket_stride     = libsais_get_bucket_stride(buckets - &SA[n], bucket_size, omp_num_threads);
+            fast_sint_t free_space        = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[n]);
+            fast_sint_t bucket_stride     = libsais_get_bucket_stride(free_space, bucket_size, omp_num_threads);
 
             {
                 thread_state[omp_thread_num].state.position = omp_block_start + omp_block_size;
@@ -1128,7 +1135,7 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(const sa_si
     return m;
 }
 
-static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
 #if defined(LIBSAIS_OPENMP)
     #pragma omp parallel num_threads(threads) if(threads > 1 && n >= 65536)
@@ -1138,7 +1145,7 @@ static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(const 
         fast_sint_t omp_thread_num    = omp_get_thread_num();
         fast_sint_t omp_num_threads   = omp_get_num_threads();
 #else
-        UNUSED(threads); UNUSED(thread_state);
+        UNUSED(local_buckets); UNUSED(threads); UNUSED(thread_state);
 
         fast_sint_t omp_thread_num    = 0;
         fast_sint_t omp_num_threads   = 1;
@@ -1155,7 +1162,8 @@ static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(const 
         else
         {
             fast_sint_t bucket_size       = 2 * (fast_sint_t)k;
-            fast_sint_t bucket_stride     = libsais_get_bucket_stride(buckets - &SA[(fast_sint_t)n + (fast_sint_t)n], bucket_size, omp_num_threads);
+            fast_sint_t free_space        = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[(fast_sint_t)n + (fast_sint_t)n]);
+            fast_sint_t bucket_stride     = libsais_get_bucket_stride(free_space, bucket_size, omp_num_threads);
 
             {
                 thread_state[omp_thread_num].state.position = omp_block_start + omp_block_size;
@@ -1292,20 +1300,22 @@ static sa_sint_t libsais_count_and_gather_compacted_lms_suffixes_32s_2k_nofs_omp
     return m;
 }
 
-static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
     sa_sint_t m;
 
 #if defined(LIBSAIS_OPENMP)
-    sa_sint_t max_threads = (sa_sint_t)((buckets - &SA[n]) / ((4 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
+    fast_sint_t free_space  = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[n]);
+    sa_sint_t max_threads   = (sa_sint_t)(free_space / ((4 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
+
     if (max_threads > 1 && n >= 65536 && n / k >= 2)
     {
         if (max_threads > n / 16 / k) { max_threads = n / 16 / k; }
-        m = libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(T, SA, n, k, buckets, max_threads > 2 ? max_threads : 2, thread_state);
+        m = libsais_count_and_gather_lms_suffixes_32s_4k_fs_omp(T, SA, n, k, buckets, local_buckets, max_threads > 2 ? max_threads : 2, thread_state);
     }
     else
 #else
-    UNUSED(thread_state);
+    UNUSED(local_buckets); UNUSED(thread_state);
 #endif
     {
         m = libsais_count_and_gather_lms_suffixes_32s_4k_nofs_omp(T, SA, n, k, buckets, threads);
@@ -1314,20 +1324,22 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_4k_omp(const sa_sint_
     return m;
 }
 
-static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
     sa_sint_t m;
 
 #if defined(LIBSAIS_OPENMP)
-    sa_sint_t max_threads = (sa_sint_t)((buckets - &SA[n]) / ((2 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
+    fast_sint_t free_space  = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[n]);
+    sa_sint_t max_threads   = (sa_sint_t)(free_space / ((2 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
+
     if (max_threads > 1 && n >= 65536 && n / k >= 2)
     {
         if (max_threads > n / 8 / k) { max_threads = n / 8 / k; }
-        m = libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(T, SA, n, k, buckets, max_threads > 2 ? max_threads : 2, thread_state);
+        m = libsais_count_and_gather_lms_suffixes_32s_2k_fs_omp(T, SA, n, k, buckets, local_buckets, max_threads > 2 ? max_threads : 2, thread_state);
     }
     else
 #else
-    UNUSED(thread_state);
+    UNUSED(local_buckets); UNUSED(thread_state);
 #endif
     {
         m = libsais_count_and_gather_lms_suffixes_32s_2k_nofs_omp(T, SA, n, k, buckets, threads);
@@ -1336,18 +1348,20 @@ static sa_sint_t libsais_count_and_gather_lms_suffixes_32s_2k_omp(const sa_sint_
     return m;
 }
 
-static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static void libsais_count_and_gather_compacted_lms_suffixes_32s_2k_omp(const sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
 #if defined(LIBSAIS_OPENMP)
-    sa_sint_t max_threads = (sa_sint_t)((buckets - &SA[(fast_sint_t)n + (fast_sint_t)n]) / ((2 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
-    if (max_threads > 1 && n >= 65536 && n / k >= 2)
+    fast_sint_t free_space  = local_buckets ? LIBSAIS_LOCAL_BUFFER_SIZE : (buckets - &SA[(fast_sint_t)n + (fast_sint_t)n]);
+    sa_sint_t max_threads   = (sa_sint_t)(free_space / ((2 * (fast_sint_t)k + 15) & (-16))); if (max_threads > threads) { max_threads = threads; }
+
+    if (!local_buckets && max_threads > 1 && n >= 65536 && n / k >= 2)
     {
         if (max_threads > n / 8 / k) { max_threads = n / 8 / k; }
-        libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(T, SA, n, k, buckets, max_threads > 2 ? max_threads : 2, thread_state);
+        libsais_count_and_gather_compacted_lms_suffixes_32s_2k_fs_omp(T, SA, n, k, buckets, local_buckets, max_threads > 2 ? max_threads : 2, thread_state);
     }
     else
 #else
-    UNUSED(thread_state);
+    UNUSED(local_buckets); UNUSED(thread_state);
 #endif
     {
         libsais_count_and_gather_compacted_lms_suffixes_32s_2k_nofs_omp(T, SA, n, k, buckets, threads);
@@ -1475,17 +1489,18 @@ static void libsais_initialize_buckets_end_32s_1k(sa_sint_t k, sa_sint_t * RESTR
 static sa_sint_t libsais_initialize_buckets_for_lms_suffixes_radix_sort_8u(const uint8_t * RESTRICT T, sa_sint_t * RESTRICT buckets, sa_sint_t first_lms_suffix)
 {
     {
-        fast_uint_t     s = 0;
+        fast_uint_t     f0 = 0;
+        fast_uint_t     f1 = 0;
         fast_sint_t     c0 = T[first_lms_suffix];
         fast_sint_t     c1 = 0;
 
         for (; --first_lms_suffix >= 0; )
         {
-            c1 = c0; c0 = T[first_lms_suffix]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]--;
+            c1 = c0; c0 = T[first_lms_suffix]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]--;
         }
 
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, (s << 1) & 3)]--;
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0)]--;
     }
 
     {
@@ -1520,17 +1535,18 @@ static void libsais_initialize_buckets_for_lms_suffixes_radix_sort_32s_2k(const 
 static sa_sint_t libsais_initialize_buckets_for_lms_suffixes_radix_sort_32s_6k(const sa_sint_t * RESTRICT T, sa_sint_t k, sa_sint_t * RESTRICT buckets, sa_sint_t first_lms_suffix)
 {
     {
-        fast_uint_t     s = 0;
+        fast_uint_t     f0 = 0;
+        fast_uint_t     f1 = 0;
         fast_sint_t     c0 = T[first_lms_suffix];
         fast_sint_t     c1 = 0;
 
         for (; --first_lms_suffix >= 0; )
         {
-            c1 = c0; c0 = T[first_lms_suffix]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1)));
-            buckets[BUCKETS_INDEX4((fast_uint_t)c1, s & 3)]--;
+            c1 = c0; c0 = T[first_lms_suffix]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+            buckets[BUCKETS_INDEX4((fast_uint_t)c1, f1 + f1 + f0)]--;
         }
 
-        buckets[BUCKETS_INDEX4((fast_uint_t)c0, (s << 1) & 3)]--;
+        buckets[BUCKETS_INDEX4((fast_uint_t)c0, f0 + f0)]--;
     }
 
     {
@@ -1937,7 +1953,8 @@ static sa_sint_t libsais_radix_sort_lms_suffixes_32s_1k(const sa_sint_t * RESTRI
 
     sa_sint_t             i = n - 2;
     sa_sint_t             m = 0;
-    fast_uint_t           s = 1;
+    fast_uint_t           f0 = 1;
+    fast_uint_t           f1 = 0;
     fast_sint_t           c0 = T[n - 1];
     fast_sint_t           c1 = 0;
     fast_sint_t           c2 = 0;
@@ -1951,23 +1968,23 @@ static sa_sint_t libsais_radix_sort_lms_suffixes_32s_1k(const sa_sint_t * RESTRI
         libsais_prefetchw(&buckets[T[i - prefetch_distance - 2]]);
         libsais_prefetchw(&buckets[T[i - prefetch_distance - 3]]);
 
-        c1 = T[i - 0]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); 
-        if ((s & 3) == 1) { SA[--buckets[c2 = c0]] = i + 1; m++; }
+        c1 = T[i - 0]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); 
+        if (f1 & ~f0) { SA[--buckets[c2 = c0]] = i + 1; m++; }
         
-        c0 = T[i - 1]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); 
-        if ((s & 3) == 1) { SA[--buckets[c2 = c1]] = i - 0; m++; }
+        c0 = T[i - 1]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); 
+        if (f0 & ~f1) { SA[--buckets[c2 = c1]] = i - 0; m++; }
 
-        c1 = T[i - 2]; s = (s << 1) + (fast_uint_t)(c1 > (c0 - (fast_sint_t)(s & 1))); 
-        if ((s & 3) == 1) { SA[--buckets[c2 = c0]] = i - 1; m++; }
+        c1 = T[i - 2]; f1 = (fast_uint_t)(c1 > (c0 - (fast_sint_t)(f0))); 
+        if (f1 & ~f0) { SA[--buckets[c2 = c0]] = i - 1; m++; }
 
-        c0 = T[i - 3]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); 
-        if ((s & 3) == 1) { SA[--buckets[c2 = c1]] = i - 2; m++; }
+        c0 = T[i - 3]; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1))); 
+        if (f0 & ~f1) { SA[--buckets[c2 = c1]] = i - 2; m++; }
     }
 
     for (; i >= 0; i -= 1)
     {
-        c1 = c0; c0 = T[i]; s = (s << 1) + (fast_uint_t)(c0 > (c1 - (fast_sint_t)(s & 1))); 
-        if ((s & 3) == 1) { SA[--buckets[c2 = c1]] = i + 1; m++; }
+        c1 = c0; c0 = T[i]; f1 = f0; f0 = (fast_uint_t)(c0 > (c1 - (fast_sint_t)(f1)));
+        if (f0 & ~f1) { SA[--buckets[c2 = c1]] = i + 1; m++; }
     }
 
     if (m > 1)
@@ -6606,13 +6623,13 @@ static void libsais_merge_compacted_lms_suffixes_32s_omp(sa_sint_t * RESTRICT T,
     libsais_merge_nonunique_lms_suffixes_32s_omp(SA, n, m, f, threads, thread_state);
 }
 
-static void libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t m, sa_sint_t fs, sa_sint_t f, sa_sint_t * RESTRICT buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
+static void libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t m, sa_sint_t fs, sa_sint_t f, sa_sint_t * RESTRICT buckets, sa_sint_t local_buckets, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
     if (f > 0)
     {
         memmove(&SA[n - m - 1], &SA[n + fs - m], (size_t)f * sizeof(sa_sint_t));
 
-        libsais_count_and_gather_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, threads, thread_state);
+        libsais_count_and_gather_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, local_buckets, threads, thread_state);
         libsais_reconstruct_lms_suffixes_omp(SA, n, m - f, threads);
 
         memcpy(&SA[n - m - 1 + f], &SA[0], ((size_t)m - (size_t)f) * sizeof(sa_sint_t));
@@ -6652,13 +6669,13 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
 {
     fs = fs < (SAINT_MAX - n) ? fs : (SAINT_MAX - n);
 
-    if (k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6 && threads == 1)))
+    if (k > 0 && ((fs / k >= 6) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6)))
     {
         sa_sint_t alignment = (fs - 1024) / k >= 6 ? (sa_sint_t)1024 : (sa_sint_t)16;
         sa_sint_t * RESTRICT buckets = (fs - alignment) / k >= 6 ? (sa_sint_t *)libsais_align_up(&SA[n + fs - 6 * (fast_sint_t)k - alignment], (size_t)alignment * sizeof(sa_sint_t)) : &SA[n + fs - 6 * (fast_sint_t)k];
-        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 6 && threads == 1) ? local_buffer : buckets;
+        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE > fs) ? local_buffer : buckets;
 
-        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_4k_omp(T, SA, n, k, buckets, threads, thread_state);
+        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_4k_omp(T, SA, n, k, buckets, buckets == local_buffer, threads, thread_state);
         if (m > 1)
         {
             memset(SA, 0, ((size_t)n - (size_t)m) * sizeof(sa_sint_t));
@@ -6689,7 +6706,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                     return -2;
                 }
 
-                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, threads, thread_state);
+                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, buckets == local_buffer, threads, thread_state);
             }
             else
             {
@@ -6711,13 +6728,13 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
 
         return 0;
     }
-    else if (k > 0 && (n <= SAINT_MAX / 2) && ((fs / k >= 4) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 4 && threads == 1)))
+    else if (k > 0 && (n <= SAINT_MAX / 2) && ((fs / k >= 4) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 4)))
     {
         sa_sint_t alignment = (fs - 1024) / k >= 4 ? (sa_sint_t)1024 : (sa_sint_t)16;
         sa_sint_t * RESTRICT buckets = (fs - alignment) / k >= 4 ? (sa_sint_t *)libsais_align_up(&SA[n + fs - 4 * (fast_sint_t)k - alignment], (size_t)alignment * sizeof(sa_sint_t)) : &SA[n + fs - 4 * (fast_sint_t)k];
-        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 4 && threads == 1) ? local_buffer : buckets;
+        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE > fs) ? local_buffer : buckets;
 
-        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, threads, thread_state);
+        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, buckets == local_buffer, threads, thread_state);
         if (m > 1)
         {
             libsais_initialize_buckets_for_radix_and_partial_sorting_32s_4k(T, k, buckets, SA[n - m]);
@@ -6738,7 +6755,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                     return -2;
                 }
 
-                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, threads, thread_state);
+                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, buckets == local_buffer, threads, thread_state);
             }
             else
             {
@@ -6756,13 +6773,13 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
 
         return 0;
     }
-    else if (k > 0 && ((fs / k >= 2) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 2 && threads == 1)))
+    else if (k > 0 && ((fs / k >= 2) || (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 2)))
     {
         sa_sint_t alignment = (fs - 1024) / k >= 2 ? (sa_sint_t)1024 : (sa_sint_t)16;
         sa_sint_t * RESTRICT buckets = (fs - alignment) / k >= 2 ? (sa_sint_t *)libsais_align_up(&SA[n + fs - 2 * (fast_sint_t)k - alignment], (size_t)alignment * sizeof(sa_sint_t)) : &SA[n + fs - 2 * (fast_sint_t)k];
-        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE / k >= 2 && threads == 1) ? local_buffer : buckets;
+        buckets = (LIBSAIS_LOCAL_BUFFER_SIZE > fs) ? local_buffer : buckets;
 
-        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, threads, thread_state);
+        sa_sint_t m = libsais_count_and_gather_lms_suffixes_32s_2k_omp(T, SA, n, k, buckets, buckets == local_buffer, threads, thread_state);
         if (m > 1)
         {
             libsais_initialize_buckets_for_lms_suffixes_radix_sort_32s_2k(T, k, buckets, SA[n - m]);
@@ -6783,7 +6800,7 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
                     return -2;
                 }
 
-                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, threads, thread_state);
+                libsais_reconstruct_compacted_lms_suffixes_32s_2k_omp(T, SA, n, k, m, fs, f, buckets, buckets == local_buffer, threads, thread_state);
             }
             else
             {
@@ -6854,9 +6871,9 @@ static sa_sint_t libsais_main_32s_recursion(sa_sint_t * RESTRICT T, sa_sint_t * 
 
 static sa_sint_t libsais_main_32s_entry(sa_sint_t * RESTRICT T, sa_sint_t * RESTRICT SA, sa_sint_t n, sa_sint_t k, sa_sint_t fs, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
 {
-    sa_sint_t local_buffer[LIBSAIS_LOCAL_BUFFER_SIZE];
+    sa_sint_t local_buffer[2 * LIBSAIS_LOCAL_BUFFER_SIZE];
 
-    return libsais_main_32s_recursion(T, SA, n, k, fs, threads, thread_state, local_buffer);
+    return libsais_main_32s_recursion(T, SA, n, k, fs, threads, thread_state, local_buffer + LIBSAIS_LOCAL_BUFFER_SIZE);
 }
 
 static sa_sint_t libsais_main_8u(const uint8_t * T, sa_sint_t * SA, sa_sint_t n, sa_sint_t * RESTRICT buckets, sa_sint_t flags, sa_sint_t r, sa_sint_t * RESTRICT I, sa_sint_t fs, sa_sint_t * freq, sa_sint_t threads, LIBSAIS_THREAD_STATE * RESTRICT thread_state)
